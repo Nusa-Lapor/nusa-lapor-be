@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-6q9s-a3c!rsup^8yvp8e+1yf6m6w@_w&tr-&a=ctv33ooer97r' # to be changed later
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-6q9s-a3c!rsup^8yvp8e+1yf6m6w@_w&tr-&a=ctv33ooer97r')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DJANGO_DEBUG', default=True if os.environ.get('DJANGO_ENV') == 'development' else False, cast=bool)
@@ -93,16 +93,28 @@ ASGI_APPLICATION = "nusa_lapor_backend.asgi.application"
 # }
 
 # Postgres (supabase) database
-DATABASES = {
-    'default': {
-        'ENGINE': config('DATABASE_ENGINE'),
-        'HOST': config('DATABASE_HOST'),
-        'NAME': config('DATABASE_NAME'),
-        'USER': config('DATABASE_USER'),
-        'PORT': config('DATABASE_PORT'),
-        'PASSWORD': config('DATABASE_PASSWORD'),
+if DEBUG:
+    DATABASES = {
+        'default': {
+            'ENGINE': config('PROD_DATABASE_ENGINE'),
+            'HOST': config('PROD_DATABASE_HOST'),
+            'NAME': config('PROD_DATABASE_NAME'),
+            'USER': config('PROD_DATABASE_USER'),
+            'PORT': config('PROD_DATABASE_PORT', default='6543'),
+            'PASSWORD': config('PROD_DATABASE_PASSWORD'),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': config('LOCAL_DATABASE_ENGINE'),
+            'HOST': config('LOCAL_DATABASE_HOST'),
+            'NAME': config('LOCAL_DATABASE_NAME'),
+            'USER': config('LOCAL_DATABASE_USER'),
+            'PORT': config('LOCAL_DATABASE_PORT', default='5432'),
+            'PASSWORD': config('LOCAL_DATABASE_PASSWORD'),
+        }
+    }
 
 
 # Password validation
