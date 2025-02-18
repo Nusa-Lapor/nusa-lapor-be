@@ -4,39 +4,39 @@
 
 ## Instalasi dan Cara Menjalankan 📌
 
-Dalam development NusaLapor, kami memakai _techstack_ Django sebagai _backend_, Next.js sebagai _frontend_, dan Supabase / PostgreSQL sebagai basis data yang digunakan.
+Dalam development NusaLapor, kami memakai _techstack_ Django sebagai _backend_, Next.js sebagai _frontend_, ShadcnUI untuk UI/UX dan Supabase / PostgreSQL, Drizzle ORM (_unconfirmed_) sebagai basis data yang digunakan.
 
 ### 1. Instalasi Project🙌
 
 Untuk memulai dari project *backend* ini, berikut langkah-langkah yang bisa dikerjakan:
 
 1. Melakukan cloning project ke local
-```git
+```bash
 git clone https://github.com/Nusa-Lapor/nusa-lapor-be.git
 ```
 
 2. Instalasi requirements dari requirements.txt yang sudah ada
-```terminal
+```bash
 pip install -r requirments.txt
 ```
 
 3. Masuk ke `development` environments
 
 **`Windows`**
-```terminal
+```bash
 python -m venv env
 env\Scripts\activate
 python manage.py runserver
 ```
 
 **`macOS`**
-```terminal
+```bash
 python3 -m venv env 
 source env/bin/activate
 python3 manage.py runserver
 ```
 
-Dengan menyelesaikan langkah-langkah berikut, project *backend* Django ini siap dikembangkan (develop). Untuk melihat progres *development* silakan membuka `http://127.0.0.1:8000/` atau `http://localhost:8000/`
+Dengan menyelesaikan langkah-langkah berikut, project *backend* Django ini siap dikembangkan (develop). Untuk melihat progres *development* silakan membuka [http://127.0.0.1:8000/](http://127.0.0.1:8000/) atau [http://localhost:8000/](http://localhost:8000/).
 
 ### 2. Instalasi Packages📦
 
@@ -69,42 +69,43 @@ PROD_DATABASE_PASSWORD=password_supabase
 > **Catatan:** untuk PROD DB details bisa ditanyakan kepada owner
 - Tambahkan role bernama **"user"** Anda di PC tempat bekerja ke PostgreSQL. Nama **"user"** bisa dilihat seperti pada `C:Users\user` (nama **user** menyesuaikan dengan PC Anda).
 > Masuk ke postgres sebagai `superuser`
-```terminal
+```bash
 psql -U postgres
 ```
 > Selanjutnya masukkan password yang sudah dibuat dari instalasi PostgreSQL dan tampilan terminal akan berubah menjadi
-```terminal
-postgres=> 
+```bash
+postgres=# 
 ```
 > Jika sudah demikian, maka kalian harus membuat role menyesuaikan nama **user** Anda. Maka, Anda diperkenankan menulis **(jangan menulis `\q` terlebih dahulu jika tidak ingin keluar dari menu superuser PostgreSQL postgres)
-```terminal
+```bash
 CREATE ROLE user WITH LOGIN PASSWORD password;
 ALTER ROLE user CREATEDB;
 \q
 ```
 > Ubah `user` menjadi nama **user** Anda dan `password` dengan password yang Anda buat. Jangan lupa untuk menyimpan passwordnya. Selanjutnya, buatlah database bernama `nusalapordb` untuk database local
-```terminal
+```bash
 createdb nusalapor
 ```
 > Kalian akan memasukkan password untuk role **user** yang tadi sudah dibuat. Untuk memastikan bahwa pembuatan database berhasil, masuk ke menu databasenya dengan (ganti `user` dengan nama user Anda sendiri)
-```terminal
+```bash
 psql -U user -d nusalapor
 ```
 > Selanjutnya tampilan terminal akan menjadi
-```terminal
-nusalapordb =>
+```bash
+nusalapordb=>
 ```
-> Jika demikian, maka Anda telah berhasil menambahkan database local Anda. **Jangan lupa untuk mengubah variabel `.env` untuk `LOCAL_DATABASE_USER` dan `LOCAL_DATABASE_PASSWORD` menjadi nama role/user dan passwordnya yang sudah dibuat.
+> Jika demikian, maka Anda telah berhasil menambahkan database local Anda. **Jangan lupa untuk mengubah variabel `.env` untuk `LOCAL_DATABASE_USER` dan `LOCAL_DATABASE_PASSWORD` menjadi nama role/user dan passwordnya yang sudah dibuat.**
 
 ### 3. Catatan tambahan📝
 
 Anda bisa _spend_ waktu untuk mempelajari dokumentasi _techstack_ yang digunakan dengan _hyperlink_ di bawah ini:
 
 - [PostgreSQL](https://postgresql.org)
-- [Supabase](https://supabase.com)
 - [Next.js](https://nextjs.org)
 - [Django](https://www.djangoproject.com/)
+- [ShadcnUI](https://ui.shadcn.com/)
+- **TBD (unconfirmed):** [Supabase](https://supabase.com)
 - **TBD (unconfirmed):** [Drizzle ORM](https://orm.drizzle.team)
 
-### 4. Deployment
+### 4. Deployment🔗🏁
 **TBA**
