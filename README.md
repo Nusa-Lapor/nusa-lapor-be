@@ -4,7 +4,7 @@
 
 ## Instalasi dan Cara Menjalankan 📌
 
-Dalam development NusaLapor, kami memakai _techstack_ Django sebagai _backend_, Next.js sebagai _frontend_, ShadcnUI untuk UI/UX dan Supabase / PostgreSQL, Prisma ORM sebagai basis data yang digunakan.
+Dalam development NusaLapor, kami memakai _techstack_ Django sebagai _backend_, Next.js sebagai _frontend_, ShadcnUI untuk UI/UX dan PostgreSQL, Prisma ORM sebagai basis data yang digunakan.
 
 ### 1. Instalasi Project🙌
 
@@ -104,9 +104,6 @@ Anda bisa _spend_ waktu untuk mempelajari dokumentasi _techstack_ yang digunakan
 - [Next.js](https://nextjs.org)
 - [Django](https://www.djangoproject.com/)
 - [ShadcnUI](https://ui.shadcn.com/)
-- **TBD (unconfirmed):** [Supabase](https://supabase.com)
-- [Prisma ORM](https://www.prisma.io/)
-- [Prisma-python](https://github.com/RobertCraigie/prisma-client-py?tab=readme-ov-file)
 
 ### 4. Deployment🔗🏁
 **TBA**
