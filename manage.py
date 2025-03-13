@@ -11,7 +11,7 @@ def main():
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'nusa_lapor_backend.settings')
 
     # # Load environment variables from .env
-    # load_dotenv()
+    load_dotenv()
 
     # # Fetch variables
     # USER = os.getenv("PROD_DATABASE_USER")

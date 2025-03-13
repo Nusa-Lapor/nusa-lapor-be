@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from decouple import config
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +26,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-6q9s-a3c!rsup^8yvp8e+1yf6m6w@_w&tr-&a=ctv33ooer97r')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DJANGO_DEBUG', default=True if os.environ.get('DJANGO_ENV') == 'development' else False, cast=bool)
+DEBUG = config('DJANGO_DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1'] # deployment hostnames to be added later
 
@@ -41,12 +42,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_nextjs.apps.DjangoNextJSConfig',
+    'main',
+    'api_auth',
     'psycopg2',
     'decouple',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
     'channels',
-    'main',
 ]
 
 MIDDLEWARE = [
@@ -59,6 +62,29 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+}
+
+AUTH_USER_MODEL = 'api_auth.User'
 
 ROOT_URLCONF = 'nusa_lapor_backend.urls'
 
@@ -92,29 +118,16 @@ ASGI_APPLICATION = "nusa_lapor_backend.asgi.application"
 #     }
 # }
 
-# Postgres (supabase) database
-if DEBUG:
-    DATABASES = {
-        'default': {
-            'ENGINE': config('PROD_DATABASE_ENGINE'),
-            'HOST': config('PROD_DATABASE_HOST'),
-            'NAME': config('PROD_DATABASE_NAME'),
-            'USER': config('PROD_DATABASE_USER'),
-            'PORT': config('PROD_DATABASE_PORT', default='6543'),
-            'PASSWORD': config('PROD_DATABASE_PASSWORD'),
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
+        'NAME': config('DB_NAME'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST'),
+        'PORT': config('DB_PORT', default='5432'),
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': config('LOCAL_DATABASE_ENGINE'),
-            'HOST': config('LOCAL_DATABASE_HOST'),
-            'NAME': config('LOCAL_DATABASE_NAME'),
-            'USER': config('LOCAL_DATABASE_USER'),
-            'PORT': config('LOCAL_DATABASE_PORT', default='5432'),
-            'PASSWORD': config('LOCAL_DATABASE_PASSWORD'),
-        }
-    }
+}
 
 
 # Password validation
