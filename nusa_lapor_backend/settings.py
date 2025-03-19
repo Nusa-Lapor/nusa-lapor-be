@@ -14,6 +14,7 @@ import os
 from decouple import config
 from pathlib import Path
 from datetime import timedelta
+from cryptography.fernet import Fernet
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -30,6 +31,15 @@ DEBUG = config('DJANGO_DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1'] # deployment hostnames to be added later
 
+# Cryptography key, separated from SECRET_KEY
+CRYPTOGRAHY_KEY = os.environ.get('CRYPTOGRAPHY_KEY',)
+
+# Cryptography settings
+CRYPTOGRAPHY_SETTINGS = {
+    'KEY': CRYPTOGRAHY_KEY,
+    'cipher': 'AES',
+    'mode': 'CBC',
+}
 
 # Application definition
 

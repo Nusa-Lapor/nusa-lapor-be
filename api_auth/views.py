@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.request import Request
 from django.views.decorators.csrf import csrf_exempt
 import json
+from .serializers import UserSerializer
 
 User = get_user_model()
 
@@ -14,12 +15,20 @@ User = get_user_model()
 @api_view(['POST'])
 def register(request: Request):
     if request.method == 'POST':
-        data = json.loads(request.body)
-        email = data.get('email')
-        username = data.get('username')
-        name = data.get('name')
-        password = data.get('password')
-
+        # Use the serializer to handle data validation and phone encryption
+        serializer = UserSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return JsonResponse({'error': serializer.errors}, status=400)
+        
+        # Extract validated data
+        validated_data = serializer.validated_data
+        email = validated_data.get('email')
+        username = validated_data.get('username')
+        name = validated_data.get('name')
+        password = validated_data.get('password')
+        nomor_telepon = validated_data.get('nomor_telepon', None)
+        
         if not email or not username or not password:
             return JsonResponse({'error': 'Email, username, and password are required'}, status=400)
 
@@ -27,11 +36,13 @@ def register(request: Request):
         hashed_password = hashlib.sha256(password.encode()).hexdigest()
 
         try:
+            # Create the user with the encrypted phone number
             user = User.objects.create(
                 email=email,
                 username=username,
                 name=name,
-                password=hashed_password
+                password=hashed_password,
+                nomor_telepon=nomor_telepon,  # Already encrypted by the serializer
             )
             return JsonResponse({'message': 'User registered successfully'}, status=201)
         except Exception as e:

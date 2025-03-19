@@ -13,6 +13,8 @@ def create_superuser(apps, schema_editor):
             username=os.environ.get('SUPERUSER_USERNAME'),
             email=os.environ.get('SUPERUSER_EMAIL'),
             password=os.environ.get('SUPERUSER_PASSWORD'),
+            name=os.environ.get('SUPERUSER_NAME'),
+            nomor_telepon=os.environ.get('SUPERUSER_TELEPON')
         )
         print('Superuser created successfully')
     else:

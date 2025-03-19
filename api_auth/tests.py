@@ -21,7 +21,8 @@ class AuthAPITestCase(TestCase):
             'email': 'test@example.com',
             'username': 'testuser',
             'name': 'Test User',
-            'password': 'password123'
+            'password': 'password123',
+            'nomor_telepon': '081333333333'
         }
         
         # Create a test user for login tests
@@ -30,7 +31,8 @@ class AuthAPITestCase(TestCase):
             email=self.valid_user['email'],
             username=self.valid_user['username'],
             name=self.valid_user['name'],
-            password=hashed_password
+            password=hashed_password,
+            nomor_telepon=self.valid_user['nomor_telepon'],
         )
 
     def test_register_success(self):
@@ -64,7 +66,16 @@ class AuthAPITestCase(TestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.json(), {'error': 'Email, username, and password are required'})
+        self.assertEqual(response.json(), {
+            "error": {
+                "email": [
+                    "This field is required."
+                ],
+                "username": [
+                    "user with this username already exists."
+                ]
+            }
+        })
 
     def test_register_duplicate_email(self):
         """Test registration with duplicate email."""
