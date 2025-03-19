@@ -143,6 +143,11 @@ def protected_admin(request: Request):
     """
     user = request.user
     
+    # Get all users in the system (as an example of admin functionality)
+    all_users_count = User.objects.count()
+    all_petugas_count = getattr(getattr(User, 'petugas', None), 'objects', None)
+    petugas_count = all_petugas_count.count() if all_petugas_count else 0
+    
     return JsonResponse({
         'message': 'This is a protected admin endpoint',
         'admin': {
