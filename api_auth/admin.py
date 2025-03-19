@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import User, Petugas
 
-class CustomUserAdmin(UserAdmin):
+class Admin(UserAdmin):
     list_display = ('email', 'username', 'name', 'is_staff', 'is_superuser')
     fieldsets = (
         (None, {'fields': ('email', 'username', 'password')}),
@@ -17,4 +17,4 @@ class CustomUserAdmin(UserAdmin):
             readonly_fields = readonly_fields + ('is_superuser',)
         return readonly_fields
 
-admin.site.register(User, CustomUserAdmin)
+admin.site.register(User, Admin)

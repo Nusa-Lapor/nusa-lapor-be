@@ -8,6 +8,7 @@ from rest_framework.request import Request
 from django.views.decorators.csrf import csrf_exempt
 import json
 from .serializers import UserSerializer
+from .permissions import IsPetugas, IsAdmin
 
 User = get_user_model()
 
@@ -112,6 +113,49 @@ def protected(request: Request):
             'email': user.email,
             'username': user.username,
             'name': user.name
+        }
+    }, status=200)
+
+@api_view(['GET'])
+@permission_classes([IsPetugas])
+def protected_petugas(request: Request):
+    """
+    Protected endpoint that only Petugas users can access.
+    """
+    petugas = request.user.petugas
+    return JsonResponse({
+        'message': 'This is a protected petugas endpoint',
+        'petugas': {
+            'id': str(petugas.id),
+            'email': petugas.email,
+            'username': petugas.username,
+            'name': petugas.name,
+            'jabatan': petugas.jabatan,
+            'is_staff': petugas.is_staff
+        }
+    }, status=200)
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def protected_admin(request: Request):
+    """
+    Protected endpoint that only admin users (superusers) can access.
+    """
+    user = request.user
+    
+    return JsonResponse({
+        'message': 'This is a protected admin endpoint',
+        'admin': {
+            'id': str(user.id),
+            'email': user.email,
+            'username': user.username,
+            'name': user.name,
+            'is_superuser': user.is_superuser,
+            'is_staff': user.is_staff
+        },
+        'system_stats': {
+            'total_users': all_users_count,
+            'total_petugas': petugas_count,
         }
     }, status=200)
 
