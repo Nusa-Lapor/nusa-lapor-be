@@ -124,7 +124,9 @@ def protected(request: Request):
             'id': user.id,
             'email': user.email,
             'username': user.username,
-            'name': user.name
+            'name': user.name,
+            'is_staff': user.is_staff,
+            'is_superuser': user.is_superuser,
         }
     }, status=200)
 
@@ -143,7 +145,8 @@ def protected_petugas(request: Request):
             'username': petugas.username,
             'name': petugas.name,
             'jabatan': petugas.jabatan,
-            'is_staff': petugas.is_staff
+            'is_staff': petugas.is_staff,
+            'is_superuser': petugas.is_superuser,
         }
     }, status=200)
 
