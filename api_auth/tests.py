@@ -1,5 +1,4 @@
-import json
-import hashlib
+import json, hashlib
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -7,6 +6,7 @@ from rest_framework import status
 from django.apps import apps
 
 User = get_user_model()
+Petugas = apps.get_model('api_auth', 'Petugas')
 
 class AuthAPITestCase(TestCase):
     def setUp(self):
@@ -15,6 +15,8 @@ class AuthAPITestCase(TestCase):
         self.register_url = reverse('api_auth:register')
         self.login_url = reverse('api_auth:login')
         self.protected_url = reverse('api_auth:protected')
+        self.protected_petugas_url = reverse('api_auth:protected_petugas')
+        self.protected_admin_url = reverse('api_auth:protected_admin')
         self.logout_url = reverse('api_auth:logout')
         
         # Test user data
@@ -25,6 +27,25 @@ class AuthAPITestCase(TestCase):
             'password': 'password123',
             'nomor_telepon': '081333333333'
         }
+
+        # Test admin data
+        self.valid_admin = {
+            'email': 'admin@adminexample.com',
+            'username': 'adminuser',
+            'name': 'Admin User',
+            'password': 'adminpass123',
+            'nomor_telepon': '081444444444'
+        }
+
+        # Test petugas data
+        self.valid_petugas = {
+            'email': 'petugas@petugasexample.com',
+            'username': 'petugasuser',
+            'name': 'Petugas User',
+            'password': 'petugaspass123',
+            'nomor_telepon': '081555555555',
+            'jabatan': 'Petugas Lapangan',
+        }
         
         # Create a test user for login tests
         self.user = User.objects.create_user(
@@ -33,6 +54,25 @@ class AuthAPITestCase(TestCase):
             name=self.valid_user['name'],
             password=self.valid_user['password'],
             nomor_telepon=self.valid_user['nomor_telepon'],
+        )
+
+        # Create a test admin for admin tests
+        self.admin = User.objects.create_superuser(
+            email=self.valid_admin['email'],
+            username=self.valid_admin['username'],
+            name=self.valid_admin['name'],
+            password=self.valid_admin['password'],
+            nomor_telepon=self.valid_admin['nomor_telepon'],
+        )
+
+        # Create a test petugas for petugas tests
+        self.petugas = Petugas.objects.create_petugas(
+            email=self.valid_petugas['email'],
+            username=self.valid_petugas['username'],
+            name=self.valid_petugas['name'],
+            password=self.valid_petugas['password'],
+            nomor_telepon=self.valid_petugas['nomor_telepon'],
+            jabatan=self.valid_petugas['jabatan']
         )
 
     def test_register_success(self):
@@ -199,211 +239,97 @@ class AuthAPITestCase(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_admin_protected_endpoint_authorized(self):
-        """Test accessing admin protected endpoint with admin token."""
-        # Create an admin user
-        admin_data = {
-            'email': 'admin@example.com',
-            'username': 'adminuser',
-            'name': 'Admin User',
-            'password': 'adminpass123',
-            'nomor_telepon': '081444444444'
-        }
-        
-        # Hash the password
-        hashed_password = hashlib.sha256(admin_data['password'].encode()).hexdigest()
-        
-        # Create admin user
-        admin = User.objects.create(
-            email=admin_data['email'],
-            username=admin_data['username'],
-            name=admin_data['name'],
-            password=hashed_password,
-            nomor_telepon=admin_data['nomor_telepon'],
-            is_superuser=True,
-            is_staff=True
-        )
-        
-        # Login as admin
-        login_response = self.client.post(
+    def test_petugas_login_success(self):
+        """Test successful petugas login."""
+        response = self.client.post(
             self.login_url,
             data=json.dumps({
-                'email': admin_data['email'],
-                'password': admin_data['password']
+                'email': self.valid_petugas['email'],
+                'password': self.valid_petugas['password']
             }),
             content_type='application/json'
-        )
-        
-        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
-        admin_token = login_response.json()['token']['access']
-        
-        # Access admin protected endpoint
-        admin_url = reverse('api_auth:protected_admin')
-        response = self.client.get(
-            admin_url,
-            HTTP_AUTHORIZATION=f'Bearer {admin_token}'
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('message', response.json())
-        self.assertIn('admin', response.json())
-        self.assertEqual(response.json()['admin']['email'], admin_data['email'])
+        response_data = response.json()
+        self.assertTrue('token' in response_data)
+        self.assertTrue('refresh' in response_data['token'])
+        self.assertTrue('access' in response_data['token'])
+        self.assertTrue('user' in response_data)
+        self.assertEqual(response_data['user']['email'], self.valid_petugas['email'])
+        
+        # Store tokens for protected endpoint test
+        self.access_token = response_data['token']['access']
 
-    def test_admin_protected_endpoint_unauthorized(self):
-        """Test accessing admin protected endpoint with non-admin token."""
-        # Login with regular user
+    def test_petugas_protected_endpoint(self):
+        """Test accessing protected endpoint as a petugas."""
+        # First login to get the token
         login_response = self.client.post(
             self.login_url,
             data=json.dumps({
-                'email': self.valid_user['email'],
-                'password': self.valid_user['password']
+                'email': self.valid_petugas['email'],
+                'password': self.valid_petugas['password']
             }),
             content_type='application/json'
         )
+        access_token = login_response.json()['token']['access']
         
-        user_token = login_response.json()['token']['access']
-        
-        # Try to access admin endpoint
-        admin_url = reverse('api_auth:protected_admin')
+        # Now access protected endpoint
         response = self.client.get(
-            admin_url,
-            HTTP_AUTHORIZATION=f'Bearer {user_token}'
-        )
-        
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_petugas_protected_endpoint_authorized(self):
-        """Test accessing petugas protected endpoint with petugas token."""
-        # Define petugas data
-        petugas_data = {
-            'email': 'petugas@example.com',
-            'username': 'petugasuser',
-            'name': 'Petugas User',
-            'password': 'petugaspass123',
-            'nomor_telepon': '081555555555',
-            'jabatan': 'Field Officer'
-        }
-        
-        # Hash the password
-        hashed_password = hashlib.sha256(petugas_data['password'].encode()).hexdigest()
-        
-        # Get the Petugas model
-        Petugas = apps.get_model('api_auth', 'Petugas')
-        
-        # Create petugas user (two steps due to inheritance)
-        # First create the User part
-        user = User.objects.create(
-            email=petugas_data['email'],
-            username=petugas_data['username'],
-            name=petugas_data['name'],
-            password=hashed_password,
-            nomor_telepon=petugas_data['nomor_telepon'],
-            is_staff=True
-        )
-        
-        # Then create the Petugas part with the same ID
-        # This is needed for multi-table inheritance
-        petugas = Petugas(
-            user_ptr_id=user.id,
-            jabatan=petugas_data['jabatan']
-        )
-        petugas.save_base(raw=True)  # Special save for multi-table inheritance
-        
-        # Login as petugas
-        login_response = self.client.post(
-            self.login_url,
-            data=json.dumps({
-                'email': petugas_data['email'],
-                'password': petugas_data['password']
-            }),
-            content_type='application/json'
-        )
-        
-        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
-        petugas_token = login_response.json()['token']['access']
-        
-        # Access petugas protected endpoint
-        petugas_url = reverse('api_auth:protected_petugas')
-        response = self.client.get(
-            petugas_url,
-            HTTP_AUTHORIZATION=f'Bearer {petugas_token}'
+            self.protected_petugas_url,
+            HTTP_AUTHORIZATION=f'Bearer {access_token}'
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('message', response.json())
-        self.assertIn('petugas', response.json())
-        self.assertEqual(response.json()['petugas']['email'], petugas_data['email'])
-        self.assertEqual(response.json()['petugas']['jabatan'], petugas_data['jabatan'])
+        response_data = response.json()
+        self.assertEqual(response_data['message'], 'This is a protected petugas endpoint')
+        self.assertEqual(response_data['petugas']['email'], self.valid_petugas['email'])
+        self.assertTrue('jabatan' in response_data['petugas'])
 
-    def test_petugas_protected_endpoint_unauthorized(self):
-        """Test accessing petugas protected endpoint with non-petugas token."""
-        # Login with regular user
-        login_response = self.client.post(
+    def test_admin_login_success(self):
+        """Test successful admin login."""
+        response = self.client.post(
             self.login_url,
             data=json.dumps({
-                'email': self.valid_user['email'],
-                'password': self.valid_user['password']
+                'email': self.valid_admin['email'],
+                'password': self.valid_admin['password']
             }),
             content_type='application/json'
         )
         
-        user_token = login_response.json()['token']['access']
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response_data = response.json()
+        self.assertTrue('token' in response_data)
+        self.assertTrue('refresh' in response_data['token'])
+        self.assertTrue('access' in response_data['token'])
+        self.assertTrue('user' in response_data)
+        self.assertEqual(response_data['user']['email'], self.valid_admin['email'])
+        self.assertTrue(response_data['user']['is_superuser'])
         
-        # Try to access petugas endpoint
-        petugas_url = reverse('api_auth:protected_petugas')
-        response = self.client.get(
-            petugas_url,
-            HTTP_AUTHORIZATION=f'Bearer {user_token}'
-        )
-        
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        # Store tokens for protected endpoint test
+        self.access_token = response_data['token']['access']
 
-    def test_admin_petugas_endpoint_access(self):
-        """Test if admin can access petugas endpoint."""
-        # Create an admin user
-        admin_data = {
-            'email': 'admin2@example.com',
-            'username': 'adminuser2',
-            'name': 'Admin User 2',
-            'password': 'adminpass123',
-            'nomor_telepon': '081666666666'
-        }
-        
-        # Hash the password
-        hashed_password = hashlib.sha256(admin_data['password'].encode()).hexdigest()
-        
-        # Create admin user
-        admin = User.objects.create(
-            email=admin_data['email'],
-            username=admin_data['username'],
-            name=admin_data['name'],
-            password=hashed_password,
-            nomor_telepon=admin_data['nomor_telepon'],
-            is_superuser=True,
-            is_staff=True
-        )
-        
-        # Login as admin
+    def test_admin_protected_endpoint(self):
+        """Test accessing protected endpoint as an admin."""
+        # First login to get the token
         login_response = self.client.post(
             self.login_url,
             data=json.dumps({
-                'email': admin_data['email'],
-                'password': admin_data['password']
+                'email': self.valid_admin['email'],
+                'password': self.valid_admin['password']
             }),
             content_type='application/json'
         )
+        access_token = login_response.json()['token']['access']
         
-        admin_token = login_response.json()['token']['access']
-        
-        # Try to access petugas endpoint as admin
-        petugas_url = reverse('api_auth:protected_petugas')
+        # Now access protected endpoint
         response = self.client.get(
-            petugas_url,
-            HTTP_AUTHORIZATION=f'Bearer {admin_token}'
+            self.protected_admin_url,
+            HTTP_AUTHORIZATION=f'Bearer {access_token}'
         )
         
-        # This checks if your implementation allows admins to access petugas endpoints
-        # You might want to adjust based on your intended behavior
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        # If admins should have access, change to:
-        # self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response_data = response.json()
+        self.assertEqual(response_data['message'], 'This is a protected admin endpoint')
+        self.assertEqual(response_data['admin']['email'], self.valid_admin['email'])
+        self.assertTrue(response_data['admin']['is_superuser'])

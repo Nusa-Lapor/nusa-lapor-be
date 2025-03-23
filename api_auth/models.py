@@ -1,4 +1,4 @@
-import uuid, hashlib
+import uuid, hashlib, os, base64
 from django.db import models
 from django.contrib.auth.models import (
     AbstractBaseUser,
@@ -14,7 +14,12 @@ class UserManager(BaseUserManager):
         user = self.model(email=email, username=username, **extra_fields)
         
         if password:
-            hashed_password = hashlib.sha256(password.encode()).hexdigest()
+            user.password_salt = base64.b64encode(os.urandom(32)).decode('utf-8')
+            # Use HMAC for more secure password and salt combination
+            hashed_password = hashlib.pbkdf2_hmac('sha256', 
+                                                password.encode(), 
+                                                user.password_salt.encode(), 
+                                                100000).hex()
             user.password = hashed_password
         else:
             raise ValueError('The Password field must be set')
@@ -35,6 +40,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=100, blank=True)
     nomor_telepon = models.CharField(max_length=255, blank=True, null=True)
     password = models.CharField(max_length=255)
+    password_salt = models.CharField(max_length=64)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
@@ -58,7 +64,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         super().save(*args, **kwargs)
 
 class PetugasManager(models.Manager):
-    def create_petugas(self, email, username, password=None, nama=None, jabatan=None, nomor_telepon=None, **extra_fields):
+    def create_petugas(self, email, username, password=None, name=None, jabatan=None, nomor_telepon=None, **extra_fields):
         """
         Create and save a Petugas with the given email, username, and password.
         """
@@ -68,9 +74,9 @@ class PetugasManager(models.Manager):
         if not username:
             raise ValueError('The Username field must be set')
             
-        if not nama:
+        if not name:
             # Use username as nama if not provided
-            nama = username
+            name = username
             
         if not jabatan:
             raise ValueError('The Jabatan field must be set')
@@ -83,7 +89,7 @@ class PetugasManager(models.Manager):
             email=email,
             username=username,
             password=password,
-            name=nama,
+            name=name,
             nomor_telepon=nomor_telepon,
             **extra_fields
         )

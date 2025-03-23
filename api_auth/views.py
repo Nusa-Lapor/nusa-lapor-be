@@ -1,4 +1,4 @@
-import hashlib
+import hashlib, base64
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -38,7 +38,7 @@ def register(request: Request):
 
         try:
             # Create the user with the encrypted phone number
-            user = User.objects.create(
+            user = User.objects.create_user(
                 email=email,
                 username=username,
                 name=name,
@@ -60,6 +60,16 @@ def login(request: Request):
     try:
         user = User.objects.get(email=email)
         hashed_password = hashlib.sha256(password.encode()).hexdigest()
+
+        # Get the stored salt
+        salt_str = user.password_salt
+        salt = base64.b64decode(salt_str.encode('utf-8'))
+        
+        # Hash the provided password with the same salt
+        hashed_password = hashlib.pbkdf2_hmac('sha256', 
+                                                password.encode(), 
+                                                user.password_salt.encode(), 
+                                                100000).hex()
         if user.password == hashed_password:
            # Generate tokens
             refresh = RefreshToken.for_user(user)
@@ -70,7 +80,9 @@ def login(request: Request):
                 'id': user.id,
                 'email': user.email,
                 'username': user.username,
-                'name': user.name
+                'name': user.name,
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser,
             }
             
             # Set session data for Django's session-based auth
