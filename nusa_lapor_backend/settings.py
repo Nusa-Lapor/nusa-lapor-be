@@ -86,6 +86,9 @@ AUTHENTICATION_BACKENDS = [
     # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
 
+    # `SHA256SaltedAuthBackend` is the custom authentication backend for salted SHA-256 passwords
+    'api_auth.backends.SHA256SaltedAuthBackend',
+
     # `allauth` specific authentication methods, such as login by email
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
