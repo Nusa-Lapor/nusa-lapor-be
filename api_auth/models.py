@@ -1,4 +1,4 @@
-import uuid
+import uuid, hashlib
 from django.db import models
 from django.contrib.auth.models import (
     AbstractBaseUser,
@@ -12,7 +12,13 @@ class UserManager(BaseUserManager):
             raise ValueError('The Email field must be set')
         email = self.normalize_email(email)
         user = self.model(email=email, username=username, **extra_fields)
-        user.set_password(password)
+        
+        if password:
+            hashed_password = hashlib.sha256(password.encode()).hexdigest()
+            user.password = hashed_password
+        else:
+            raise ValueError('The Password field must be set')
+        
         user.save(using=self._db)
         return user
 

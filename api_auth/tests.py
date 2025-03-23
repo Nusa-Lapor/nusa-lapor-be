@@ -27,12 +27,11 @@ class AuthAPITestCase(TestCase):
         }
         
         # Create a test user for login tests
-        hashed_password = hashlib.sha256(self.valid_user['password'].encode()).hexdigest()
-        self.user = User.objects.create(
+        self.user = User.objects.create_user(
             email=self.valid_user['email'],
             username=self.valid_user['username'],
             name=self.valid_user['name'],
-            password=hashed_password,
+            password=self.valid_user['password'],
             nomor_telepon=self.valid_user['nomor_telepon'],
         )
 
