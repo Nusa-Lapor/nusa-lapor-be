@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.conf import settings
+from django.core.validators import RegexValidator
 from cryptography.fernet import Fernet
 import base64
 import os, re
@@ -53,64 +54,98 @@ def decrypt_phone_number(encrypted_phone):
 class EncryptedPhoneField(serializers.CharField):
     """
     A serializer field that handles encryption/decryption of phone numbers.
+    Validates phone format before encryption and handles the encryption process.
     """
     def __init__(self, **kwargs):
-        # Extract the actual phone number length limit (separate from storage length)
-        self.phone_max_length = kwargs.pop('phone_max_length', 15) 
+        # Set appropriate defaults for field
+        kwargs.setdefault('max_length', 255)  # Encrypted value needs space
+        kwargs.setdefault('allow_blank', True)
+        kwargs.setdefault('required', False)
         
-        # Storage length needs to be much longer for the encrypted value
-        kwargs.setdefault('max_length', 255)
-
-        # Pattern for phone number validation
-        # 1. 1-3 digits, optional hyphen, then 7-12 digits
-        # 2. "+" then 1-3 digits, optional hyphen, then 8-15 digits
-        # Example: 62-81234567890 or +62-81234567890 or 081234567890
-        # 3. 8-15 digits without hyphen
-        self.phone_pattern = r'^(\d{1,3}-?)?\d{7,12}$|^\+\d{1,3}-?\d{8,15}$|^\d{8,15}$'
-        
+        # Don't use validators directly - we'll handle validation in to_internal_value
+        if 'validators' in kwargs:
+            self._extra_validators = kwargs.pop('validators')
+        else:
+            self._extra_validators = []
+            
+        # Initialize the field
         super().__init__(**kwargs)
 
     def to_representation(self, value):
         """When serializing, decrypt the phone number if it's encrypted."""
-        if value and isinstance(value, str) and value.startswith('gAAA'):
-            # Looks like an encrypted value, decrypt it
-            return decrypt_phone_number(value)
+        if not value:
+            return value
+            
+        # Check if the value is encrypted
+        if isinstance(value, str) and value.startswith('gAAA'):
+            try:
+                # Decrypt the phone number
+                return decrypt_phone_number(value)
+            except Exception as e:
+                # If decryption fails, return a placeholder
+                print(f"Error decrypting phone number: {e}")
+                return "[Encrypted]"
+                
+        # If not encrypted, return as is
         return value
 
     def to_internal_value(self, data):
-        """When deserializing, validate length and then encrypt."""
-        # Skip validation for empty values
-        if not data:
-            return data
+        """
+        Validate and encrypt phone number.
+        This is where we handle both validation and encryption.
+        """
+        # Preliminary validation (CharField's validation)
+        validated_data = super().to_internal_value(data)
         
-        # Remove any whitespace
-        data = data.strip() if isinstance(data, str) else str(data).strip()
-
-        if isinstance(data, str) and not data.startswith('gAAA') and not re.match(self.phone_pattern, data):
+        # Skip empty values
+        if not validated_data:
+            return None
+            
+        # Skip already encrypted values
+        if isinstance(validated_data, str) and validated_data.startswith('gAAA'):
+            return validated_data
+            
+        # Clean the input value
+        phone = validated_data.strip()
+        
+        # Phone number pattern for Indonesian numbers
+        # More permissive pattern that should catch all valid formats
+        pattern = r'^(\+?\d{1,3}|0)[-\s]?\d{8,12}$'
+        
+        # Validate the phone format
+        if not re.match(pattern, phone):
             raise serializers.ValidationError(
-                "Invalid phone number format. Please use a valid phone number format. "
-                "Example: 081234567890, +6281234567890, or 62-81234567890."
-            )
-        
-        # Skip length validation if the data is already encrypted
-        if isinstance(data, str) and data.startswith('gAAA') and len(decrypt_phone_number(data)) <= self.phone_max_length:
-            # It's already encrypted, just return it
-            return data
-            
-        # Validate the raw phone number length before any processing
-        if len(str(data)) > self.phone_max_length:
-            raise serializers.ValidationError(
-                f"Phone number must be {self.phone_max_length} characters or less."
+                "Invalid phone number format. Please use a valid Indonesian phone number. "
+                "Example: 081234567890, +62812345678, or 0812-3456-7890"
             )
             
-        # Now process normally with CharField validation
-        value = super().to_internal_value(data)
+        # Transform the phone number to standard format
+        # 1. If starts with 0, replace with 62
+        # 2. If starts with +62, replace with 62
+        # 3. Remove any spaces or hyphens
         
-        # Encrypt if not already encrypted
-        if value and not (isinstance(value, str) and value.startswith('gAAA')):
-            return encrypt_phone_number(value)
+        # First handle the prefix
+        if phone.startswith('0'):
+            phone = '62' + phone[1:]
+        elif phone.startswith('+62'):
+            phone = '62' + phone[3:]
+        elif phone.startswith('+'):
+            phone = phone[1:]  # Just remove the plus
             
-        return value
+        # Remove any non-digit characters (spaces, hyphens, etc.)
+        phone = re.sub(r'\D', '', phone)
+        
+        # Final check: ensure the number is not too long after transformation
+        if len(phone) > 15:  # Standard max phone number length
+            raise serializers.ValidationError("Phone number too long after normalization")
+            
+        # Encrypt the validated and transformed phone number
+        try:
+            return encrypt_phone_number(phone)
+        except Exception as e:
+            # If encryption fails, raise a validation error
+            print(f"Error encrypting phone number: {e}")
+            raise serializers.ValidationError("Error processing phone number")
 
 # Example serializer that uses the EncryptedPhoneField
 class PhoneNumberSerializer(serializers.Serializer):
@@ -131,6 +166,26 @@ class EncryptedPhoneSerializerMixin:
             fields = ['id', 'username', 'nomor_telepon']
             encrypted_fields = ['nomor_telepon']  # Specify which fields should be encrypted
     """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Get encrypted fields from Meta
+        encrypted_fields = getattr(self.Meta, 'encrypted_fields', [])
+        
+        # Register EncryptedPhoneField for each encrypted field that doesn't have a custom field
+        for field_name in encrypted_fields:
+            if field_name in self.fields and not isinstance(self.fields[field_name], EncryptedPhoneField):
+                # Only replace CharField fields, not custom fields
+                if isinstance(self.fields[field_name], serializers.CharField):
+                    # Copy existing field attributes
+                    field_kwargs = {
+                        'required': self.fields[field_name].required,
+                        'allow_blank': getattr(self.fields[field_name], 'allow_blank', True),
+                        'label': self.fields[field_name].label,
+                        'help_text': self.fields[field_name].help_text,
+                    }
+                    # Replace with EncryptedPhoneField
+                    self.fields[field_name] = EncryptedPhoneField(**field_kwargs)
+    
     def to_representation(self, instance):
         """Decrypt encrypted fields when serializing."""
         representation = super().to_representation(instance)
@@ -139,19 +194,16 @@ class EncryptedPhoneSerializerMixin:
         for field_name in encrypted_fields:
             if field_name in representation and representation[field_name]:
                 value = representation[field_name]
-                if isinstance(value, str) and value.startswith('gAAA'):
-                    representation[field_name] = decrypt_phone_number(value)
+                # Skip if already handled by EncryptedPhoneField
+                if not isinstance(self.fields.get(field_name), EncryptedPhoneField):
+                    if isinstance(value, str) and value.startswith('gAAA'):
+                        representation[field_name] = decrypt_phone_number(value)
                 
         return representation
-
+    
     def to_internal_value(self, data):
-        """Encrypt specified fields when deserializing."""
-        encrypted_fields = getattr(self.Meta, 'encrypted_fields', [])
-        
-        for field_name in encrypted_fields:
-            if field_name in data and data[field_name]:
-                value = data[field_name]
-                if not (isinstance(value, str) and value.startswith('gAAA')):
-                    data[field_name] = encrypt_phone_number(value)
-        
+        """
+        No need to handle encryption here anymore - the EncryptedPhoneField
+        will handle it automatically. This method is kept for backward compatibility.
+        """
         return super().to_internal_value(data)

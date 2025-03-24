@@ -4,6 +4,8 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from django.apps import apps
+from api_auth.utils import EncryptedPhoneField
+from rest_framework.serializers import ValidationError
 
 User = get_user_model()
 Petugas = apps.get_model('api_auth', 'Petugas')
@@ -114,7 +116,7 @@ class AuthAPITestCase(TestCase):
                     "This field is required."
                 ],
                 "username": [
-                    "user with this username already exists."
+                    "User with this username already exists. User dengan username ini sudah ada."
                 ]
             }
         })
@@ -335,3 +337,34 @@ class AuthAPITestCase(TestCase):
         self.assertEqual(response_data['message'], 'This is a protected admin endpoint')
         self.assertEqual(response_data['admin']['email'], self.valid_admin['email'])
         self.assertTrue(response_data['admin']['is_superuser'])
+    
+    def test_encrypted_phone_field(self):
+        """Test the EncryptedPhoneField validation and transformation."""
+        field = EncryptedPhoneField()
+        
+        # Test various formats
+        test_cases = [
+            # Valid phone numbers
+            "081234567890",         # Local format
+            "+62812345678",         # International with +
+            "62812345678",          # International without +
+            "81-234567890",         # International without +, with hypen
+            "+123456789012345",     # International with +, without hypen
+            "+62-812345678",        # With hyphen
+            
+            # Invalid phone numbers that should fail
+            "62-812-345-678",       # With invalid hyphens
+            "0812 3456 7890",       # With spaces
+            "abc12345678",          # Contains letters
+            "123",                  # Too short
+            "12345678901234567890", # Too long
+        ]
+        
+        print("\nTesting EncryptedPhoneField:")
+        for phone in test_cases:
+            try:
+                result = field.to_internal_value(phone)
+                decrypted = field.to_representation(result)
+                print(f"✅ {phone} → {result[:10]}... → {decrypted}")
+            except ValidationError as ve:
+                print(f"❌ {phone} → Error: {str(ve)}")

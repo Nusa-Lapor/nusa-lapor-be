@@ -205,11 +205,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         validators=[
             RegexValidator(
                 regex=r'^[a-zA-Z0-9._-]+$',
-                message='Username hanya boleh berisi huruf, angka, dan karakter . _ -'
-            )
+                message='Username is only allowed to contain letters, numbers, and the following characters: (.),(_),(-). '\
+                        'Username hanya boleh berisi huruf, angka, dan karakter berikut: (.),(_),(-).'
+            ),
         ],
         error_messages={
-            'unique': "Username sudah digunakan.",
+            'unique': "User with this username already exists. User dengan username ini sudah ada.",
         },
     )
     name = models.CharField(
@@ -219,7 +220,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         validators=[
             RegexValidator(
                 regex=r'^[a-zA-Z\s]+$',
-                message='Nama hanya boleh berisi huruf dan spasi'
+                message='Name is only allowed to contain letters and spaces. '\
+                        'Nama hanya boleh berisi huruf dan spasi'
             )
         ],
     )
