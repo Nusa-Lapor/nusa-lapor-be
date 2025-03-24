@@ -127,6 +127,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'api_auth.throttling.LoginRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'login': '3/m',  # 3 attempts per minute
+    },
+    'EXCEPTION_HANDLER': 'api_auth.exceptions.custom_exception_handler',
 }
 
 SIMPLE_JWT = {

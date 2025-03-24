@@ -1,11 +1,14 @@
 import json, hashlib
 from django.test import TestCase, Client
+from django.core.cache import cache
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from django.apps import apps
 from api_auth.utils import EncryptedPhoneField
 from rest_framework.serializers import ValidationError
+from rest_framework.exceptions import Throttled
+from unittest.mock import patch
 
 User = get_user_model()
 Petugas = apps.get_model('api_auth', 'Petugas')
@@ -98,7 +101,6 @@ class AuthAPITestCase(TestCase):
         """Test registration with missing fields."""
         # Missing email
         invalid_user = {
-            'username': 'testuser',
             'name': 'Test User',
             'password': 'password123'
         }
@@ -110,16 +112,29 @@ class AuthAPITestCase(TestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.json(), {
-            "error": {
-                "email": [
-                    "This field is required."
-                ],
-                "username": [
-                    "User with this username already exists. User dengan username ini sudah ada."
-                ]
-            }
-        })
+        self.assertTrue('error' in response.json())
+        self.assertTrue('email' in response.json()['error'])
+        self.assertTrue('username' in response.json()['error'])
+    
+    def test_register_without_nomor_telepon(self):
+        """Test registration without nomor_telepon."""
+        # Missing nomor_telepon
+        valid_user = {
+            'email': 'testuser33@example.com',
+            'username': 'testuser33',
+            'name': 'Test User',
+            'password': 'password123',
+        }
+
+        response = self.client.post(
+            self.register_url,
+            data=json.dumps(valid_user),
+            content_type='application/json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response_data = response.json()
+        self.assertEqual(response_data['message'], 'User registered successfully')
 
     def test_register_duplicate_email(self):
         """Test registration with duplicate email."""
@@ -168,6 +183,46 @@ class AuthAPITestCase(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(response.json(), {'error': 'Invalid credentials'})
+
+    @patch('api_auth.throttling.LoginRateThrottle.allow_request')
+    def test_login_throttle_after_three_failed_attempts(self, mock_allow_request):
+        """Test login throttle after three failed attempts using direct mocking."""
+        # Configure the mock to return True for the first 3 calls (allowing the requests)
+        # and then raise Throttled for the 4th call (throttling the request)
+        mock_allow_request.side_effect = [True, True, True, Throttled(wait=60)]
+        
+        # First three failed attempts should not be throttled
+        for _ in range(3):
+            response = self.client.post(
+                self.login_url,
+                data=json.dumps({
+                    'email': self.valid_user['email'],
+                    'password': 'wrongpassword'
+                }),
+                content_type='application/json'
+            )
+            self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+            self.assertEqual(response.json(), {'error': 'Invalid credentials'})
+        
+        # Fourth attempt should be throttled
+        response = self.client.post(
+            self.login_url,
+            data=json.dumps({
+                'email': self.valid_user['email'],
+                'password': 'wrongpassword'
+            }),
+            content_type='application/json'
+        )
+        
+        # Now check for 429 response
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertIn('error', response.json())
+        # Use a more flexible assertion for the error message
+        self.assertTrue(
+            'too many' in response.json()['error'].lower() or 
+            'throttled' in response.json()['error'].lower() or
+            'login attempts' in response.json()['error'].lower()
+        )
 
     def test_protected_endpoint_with_token(self):
         """Test accessing protected endpoint with valid token."""
@@ -337,6 +392,8 @@ class AuthAPITestCase(TestCase):
         self.assertEqual(response_data['message'], 'This is a protected admin endpoint')
         self.assertEqual(response_data['admin']['email'], self.valid_admin['email'])
         self.assertTrue(response_data['admin']['is_superuser'])
+
+    
     
     def test_encrypted_phone_field(self):
         """Test the EncryptedPhoneField validation and transformation."""

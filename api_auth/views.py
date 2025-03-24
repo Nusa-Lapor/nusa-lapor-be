@@ -1,6 +1,6 @@
 import hashlib, base64
 from django.http import JsonResponse
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
@@ -10,6 +10,8 @@ import json
 from .serializers import UserSerializer
 from .permissions import IsPetugas, IsAdmin
 from .models import User
+from .throttling import LoginRateThrottle, SuccessfulLoginResetThrottle
+from rest_framework.exceptions import Throttled
 
 @csrf_exempt
 @api_view(['POST'])
@@ -48,57 +50,77 @@ def register(request: Request):
 
 @csrf_exempt
 @api_view(['POST'])
+@throttle_classes([LoginRateThrottle])
 def login(request: Request):
-    data = json.loads(request.body)
-    email = data.get('email')
-    password = data.get('password')
-
+    """Handle user login with rate limiting."""
     try:
+        # DRF's request.data has already parsed the JSON for you
+        email = request.data.get('email')
+        password = request.data.get('password')
+        
+        if not email or not password:
+            return JsonResponse({'error': 'Email and password are required'}, 
+                           status=400)
+            
+        # Attempt authentication
         user = User.objects.login(email, password)
-
+        
         if not user:
-            return JsonResponse({'error': 'Invalid credentials'}, status=401)
+            return JsonResponse({'error': 'Invalid credentials'}, 
+                           status=401)
+                
+        # Authentication successful, reset rate limit
+        throttle = SuccessfulLoginResetThrottle()
+        key = throttle.get_cache_key(request, None)
+        throttle.reset_throttle_counter(key)
         
         # Generate tokens
         refresh = RefreshToken.for_user(user)
-        access_token = str(refresh.access_token)
         
-        # Add user info to response
-        user_data = {
-            'id': user.id,
-            'email': user.email,
-            'username': user.username,
-            'name': user.name,
-            'is_staff': user.is_staff,
-            'is_superuser': user.is_superuser,
-        }
+        # Create response
+        response = JsonResponse({
+            'message': 'Login successful',
+            'token': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token)
+            },
+            'user': {
+                'id': str(user.id),
+                'email': user.email,
+                'username': user.username,
+                'name': user.name,
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser
+            }   
+        }, status=200)
         
         # Set session data for Django's session-based auth
         request.session['_auth_user_id'] = str(user.pk)
         request.session['_auth_user_backend'] = 'django.contrib.auth.backends.ModelBackend'
         request.session.save()
-        
-        response = JsonResponse({
-            'token': {
-                'refresh': str(refresh),
-                'access': access_token,
-            },
-            'user': user_data
-        })
-        
-        # Set cookie with the JWT
+
+        # Set JWT cookie
         response.set_cookie(
             key='jwt',
-            value=access_token,
-            httponly=True,  # Makes the cookie inaccessible to JavaScript
-            samesite='Lax',  # Restricts the cookie from being sent in cross-site requests
-            secure=False,  # Set to True in production with HTTPS
+            value=str(refresh.access_token),
+            httponly=True,
+            samesite='Lax'
         )
         
         return response
+    
+    except Throttled as e:
+        # Throttling error
+        wait = getattr(e, 'wait', 60)
+        response = JsonResponse({
+            'error': 'Too many login attempts',
+            'detail': f'Please try again after {wait} seconds',
+            'Retry-After': wait,
+        }, status=429)
+        return response
         
-    except User.DoesNotExist:
-        return JsonResponse({'error': 'Invalid credentials'}, status=401)
+    except Exception as ex:
+        return JsonResponse({'error': str(ex)}, status=400)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

@@ -27,8 +27,12 @@ def get_encryption_key():
 
 def encrypt_phone_number(phone_number):
     """Encrypt a phone number using Fernet symmetric encryption."""
-    if not phone_number:
+    # Handle None and empty string
+    if phone_number is None:
         return None
+        
+    if phone_number == "":
+        return ""
     
     key = get_encryption_key()
     f = Fernet(key)
@@ -37,8 +41,12 @@ def encrypt_phone_number(phone_number):
 
 def decrypt_phone_number(encrypted_phone):
     """Decrypt a phone number that was encrypted with Fernet."""
-    if not encrypted_phone:
+    # Handle None and empty string
+    if encrypted_phone is None:
         return None
+        
+    if encrypted_phone == "":
+        return ""
     
     try:
         key = get_encryption_key()
@@ -60,6 +68,7 @@ class EncryptedPhoneField(serializers.CharField):
         # Set appropriate defaults for field
         kwargs.setdefault('max_length', 255)  # Encrypted value needs space
         kwargs.setdefault('allow_blank', True)
+        kwargs.setdefault('allow_null', True)
         kwargs.setdefault('required', False)
         
         # Don't use validators directly - we'll handle validation in to_internal_value
@@ -94,19 +103,33 @@ class EncryptedPhoneField(serializers.CharField):
         Validate and encrypt phone number.
         This is where we handle both validation and encryption.
         """
-        # Preliminary validation (CharField's validation)
+        # Handle None
+        if data is None:
+            if self.allow_null:
+                return None
+            raise serializers.ValidationError("This field may not be null.")
+            
+        # Handle empty string
+        if data == "":
+            if self.allow_blank:
+                return "" if not self.allow_null else None
+            raise serializers.ValidationError("This field may not be blank.")
+        
+        # Preliminary validation from CharField
         validated_data = super().to_internal_value(data)
         
-        # Skip empty values
-        if not validated_data:
-            return None
-            
         # Skip already encrypted values
         if isinstance(validated_data, str) and validated_data.startswith('gAAA'):
             return validated_data
             
         # Clean the input value
         phone = validated_data.strip()
+        
+        # For blank values after stripping
+        if not phone:
+            if self.allow_blank:
+                return "" if not self.allow_null else None
+            raise serializers.ValidationError("This field may not be blank.")
         
         # Phone number pattern for Indonesian numbers
         # More permissive pattern that should catch all valid formats
@@ -115,8 +138,8 @@ class EncryptedPhoneField(serializers.CharField):
         # Validate the phone format
         if not re.match(pattern, phone):
             raise serializers.ValidationError(
-                "Invalid phone number format. Please use a valid Indonesian phone number. "
-                "Example: 081234567890, +62812345678, or 0812-3456-7890"
+                "Invalid phone number format. Please use a valid Indonesian / International phone number. "
+                "Example: 081234567890, +62812345678, or +62-81234567890"
             )
             
         # Transform the phone number to standard format
@@ -135,10 +158,6 @@ class EncryptedPhoneField(serializers.CharField):
         # Remove any non-digit characters (spaces, hyphens, etc.)
         phone = re.sub(r'\D', '', phone)
         
-        # Final check: ensure the number is not too long after transformation
-        if len(phone) > 15:  # Standard max phone number length
-            raise serializers.ValidationError("Phone number too long after normalization")
-            
         # Encrypt the validated and transformed phone number
         try:
             return encrypt_phone_number(phone)
@@ -180,6 +199,7 @@ class EncryptedPhoneSerializerMixin:
                     field_kwargs = {
                         'required': self.fields[field_name].required,
                         'allow_blank': getattr(self.fields[field_name], 'allow_blank', True),
+                        'allow_null': getattr(self.fields[field_name], 'allow_null', True),
                         'label': self.fields[field_name].label,
                         'help_text': self.fields[field_name].help_text,
                     }
@@ -192,7 +212,15 @@ class EncryptedPhoneSerializerMixin:
         
         encrypted_fields = getattr(self.Meta, 'encrypted_fields', [])
         for field_name in encrypted_fields:
-            if field_name in representation and representation[field_name]:
+            if field_name in representation:
+                # Handle None value
+                if representation[field_name] is None:
+                    continue
+                    
+                # Handle empty string
+                if representation[field_name] == "":
+                    continue
+                    
                 value = representation[field_name]
                 # Skip if already handled by EncryptedPhoneField
                 if not isinstance(self.fields.get(field_name), EncryptedPhoneField):
