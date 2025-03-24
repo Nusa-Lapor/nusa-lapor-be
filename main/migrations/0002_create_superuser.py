@@ -3,6 +3,7 @@
 import os
 from django.db import migrations
 from django.contrib.auth import get_user_model
+from api_auth.models import Admin
 
 User = get_user_model()
 
@@ -11,7 +12,7 @@ def create_superuser(apps, schema_editor):
     
     # Check if the superuser already exists
     if not User.objects.filter(username=os.environ.get('SUPERUSER_USERNAME')).exists():
-        User.objects.create_superuser(
+        Admin.objects.create_admin(
             username=os.environ.get('SUPERUSER_USERNAME'),
             email=os.environ.get('SUPERUSER_EMAIL'),
             password=os.environ.get('SUPERUSER_PASSWORD'),

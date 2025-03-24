@@ -7,6 +7,7 @@ from django.apps import apps
 
 User = get_user_model()
 Petugas = apps.get_model('api_auth', 'Petugas')
+Admin = apps.get_model('api_auth', 'Admin')
 
 class AuthAPITestCase(TestCase):
     def setUp(self):
@@ -57,7 +58,7 @@ class AuthAPITestCase(TestCase):
         )
 
         # Create a test admin for admin tests
-        self.admin = User.objects.create_superuser(
+        self.admin = Admin.objects.create_admin(
             email=self.valid_admin['email'],
             username=self.valid_admin['username'],
             name=self.valid_admin['name'],
@@ -87,7 +88,8 @@ class AuthAPITestCase(TestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.json(), {'message': 'User registered successfully'})
+        response_data = response.json()
+        self.assertEqual(response_data['message'], 'User registered successfully')
         self.assertEqual(User.objects.count(), 1)
 
     def test_register_missing_fields(self):
@@ -162,7 +164,7 @@ class AuthAPITestCase(TestCase):
             content_type='application/json'
         )
         
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(response.json(), {'error': 'Invalid credentials'})
 
     def test_protected_endpoint_with_token(self):

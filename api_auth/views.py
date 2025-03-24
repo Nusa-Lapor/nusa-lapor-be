@@ -9,8 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from .serializers import UserSerializer
 from .permissions import IsPetugas, IsAdmin
-
-User = get_user_model()
+from .models import User
 
 @csrf_exempt
 @api_view(['POST'])
@@ -33,16 +32,13 @@ def register(request: Request):
         if not email or not username or not password:
             return JsonResponse({'error': 'Email, username, and password are required'}, status=400)
 
-        # Hash the password with SHA-256
-        hashed_password = hashlib.sha256(password.encode()).hexdigest()
-
         try:
             # Create the user with the encrypted phone number
-            user = User.objects.create_user(
+            user = User.objects.register(
                 email=email,
                 username=username,
                 name=name,
-                password=hashed_password,
+                password=password,
                 nomor_telepon=nomor_telepon,  # Already encrypted by the serializer
             )
             return JsonResponse({'message': 'User registered successfully'}, status=201)
@@ -58,60 +54,51 @@ def login(request: Request):
     password = data.get('password')
 
     try:
-        user = User.objects.get(email=email)
-        hashed_password = hashlib.sha256(password.encode()).hexdigest()
+        user = User.objects.login(email, password)
 
-        # Get the stored salt
-        salt_str = user.password_salt
-        salt = base64.b64decode(salt_str.encode('utf-8'))
+        if not user:
+            return JsonResponse({'error': 'Invalid credentials'}, status=401)
         
-        # Hash the provided password with the same salt
-        hashed_password = hashlib.pbkdf2_hmac('sha256', 
-                                                password.encode(), 
-                                                user.password_salt.encode(), 
-                                                100000).hex()
-        if user.password == hashed_password:
-           # Generate tokens
-            refresh = RefreshToken.for_user(user)
-            access_token = str(refresh.access_token)
-            
-            # Add user info to response
-            user_data = {
-                'id': user.id,
-                'email': user.email,
-                'username': user.username,
-                'name': user.name,
-                'is_staff': user.is_staff,
-                'is_superuser': user.is_superuser,
-            }
-            
-            # Set session data for Django's session-based auth
-            request.session['_auth_user_id'] = str(user.pk)
-            request.session['_auth_user_backend'] = 'django.contrib.auth.backends.ModelBackend'
-            request.session.save()
-            
-            response = JsonResponse({
-                'token': {
-                    'refresh': str(refresh),
-                    'access': access_token,
-                },
-                'user': user_data
-            })
-            
-            # Set cookie with the JWT
-            response.set_cookie(
-                key='jwt',
-                value=access_token,
-                httponly=True,  # Makes the cookie inaccessible to JavaScript
-                samesite='Lax',  # Restricts the cookie from being sent in cross-site requests
-                secure=False,  # Set to True in production with HTTPS
-            )
-            
-            return response
-        else:
-            return JsonResponse({'error': 'Invalid credentials'}, status=400)
+        # Generate tokens
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        
+        # Add user info to response
+        user_data = {
+            'id': user.id,
+            'email': user.email,
+            'username': user.username,
+            'name': user.name,
+            'is_staff': user.is_staff,
+            'is_superuser': user.is_superuser,
+        }
+        
+        # Set session data for Django's session-based auth
+        request.session['_auth_user_id'] = str(user.pk)
+        request.session['_auth_user_backend'] = 'django.contrib.auth.backends.ModelBackend'
+        request.session.save()
+        
+        response = JsonResponse({
+            'token': {
+                'refresh': str(refresh),
+                'access': access_token,
+            },
+            'user': user_data
+        })
+        
+        # Set cookie with the JWT
+        response.set_cookie(
+            key='jwt',
+            value=access_token,
+            httponly=True,  # Makes the cookie inaccessible to JavaScript
+            samesite='Lax',  # Restricts the cookie from being sent in cross-site requests
+            secure=False,  # Set to True in production with HTTPS
+        )
+        
+        return response
+        
     except User.DoesNotExist:
-        return JsonResponse({'error': 'Invalid credentials'}, status=400)
+        return JsonResponse({'error': 'Invalid credentials'}, status=401)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -207,5 +194,6 @@ def logout(request: Request):
             response.delete_cookie('jwt')
             
         return response
+    
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
