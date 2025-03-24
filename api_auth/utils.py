@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.conf import settings
 from cryptography.fernet import Fernet
 import base64
-import os
+import os, re
 
 def get_encryption_key():
     """Get or generate a Fernet encryption key."""
@@ -60,6 +60,13 @@ class EncryptedPhoneField(serializers.CharField):
         
         # Storage length needs to be much longer for the encrypted value
         kwargs.setdefault('max_length', 255)
+
+        # Pattern for phone number validation
+        # 1. 1-3 digits, optional hyphen, then 7-12 digits
+        # 2. "+" then 1-3 digits, optional hyphen, then 8-15 digits
+        # Example: 62-81234567890 or +62-81234567890 or 081234567890
+        # 3. 8-15 digits without hyphen
+        self.phone_pattern = r'^(\d{1,3}-?)?\d{7,12}$|^\+\d{1,3}-?\d{8,15}$|^\d{8,15}$'
         
         super().__init__(**kwargs)
 
@@ -75,6 +82,15 @@ class EncryptedPhoneField(serializers.CharField):
         # Skip validation for empty values
         if not data:
             return data
+        
+        # Remove any whitespace
+        data = data.strip() if isinstance(data, str) else str(data).strip()
+
+        if isinstance(data, str) and not data.startswith('gAAA') and not re.match(self.phone_pattern, data):
+            raise serializers.ValidationError(
+                "Invalid phone number format. Please use a valid phone number format. "
+                "Example: 081234567890, +6281234567890, or 62-81234567890."
+            )
         
         # Skip length validation if the data is already encrypted
         if isinstance(data, str) and data.startswith('gAAA') and len(decrypt_phone_number(data)) <= self.phone_max_length:

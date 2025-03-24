@@ -5,6 +5,7 @@ from django.contrib.auth.models import (
     BaseUserManager,
     PermissionsMixin,
 )
+from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 
 class UserManager(BaseUserManager):
@@ -198,8 +199,30 @@ class User(AbstractBaseUser, PermissionsMixin):
     """
     id = models.UUIDField(primary_key=True, editable=False, unique=True, default=uuid.uuid4)
     email = models.EmailField(unique=True)
-    username = models.CharField(max_length=25, unique=True)
-    name = models.CharField(max_length=100, blank=True)
+    username = models.CharField(
+        max_length=25,
+        unique=True,
+        validators=[
+            RegexValidator(
+                regex=r'^[a-zA-Z0-9._-]+$',
+                message='Username hanya boleh berisi huruf, angka, dan karakter . _ -'
+            )
+        ],
+        error_messages={
+            'unique': "Username sudah digunakan.",
+        },
+    )
+    name = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        validators=[
+            RegexValidator(
+                regex=r'^[a-zA-Z\s]+$',
+                message='Nama hanya boleh berisi huruf dan spasi'
+            )
+        ],
+    )
     nomor_telepon = models.CharField(max_length=255, blank=True, null=True)
     password = models.CharField(max_length=255)
     password_salt = models.CharField(max_length=64)
