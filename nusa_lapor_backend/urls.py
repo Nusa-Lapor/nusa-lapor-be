@@ -25,3 +25,4 @@ urlpatterns = [
     path(f'{API_PREFIX}accounts/', include('allauth.urls')),
     path(f'{API_PREFIX}article/', include('api_article.urls')),
 ]
+
