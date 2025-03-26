@@ -23,5 +23,5 @@ urlpatterns = [
     path(API_PREFIX, include('main.urls')),
     path(f'{API_PREFIX}auth/', include('api_auth.urls')),
     path(f'{API_PREFIX}accounts/', include('allauth.urls')),
-    path('api/', include('article.urls')),
+    path(f'{API_PREFIX}article/', include('api_article.urls')),
 ]
