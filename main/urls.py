@@ -8,4 +8,5 @@ app_name = "main"
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('statistics/', views.get_statistics, name='statistics'),
 ]
