@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'channels',
     'main',
+    'api_report',
 ]
 
 MIDDLEWARE = [
@@ -93,18 +94,7 @@ ASGI_APPLICATION = "nusa_lapor_backend.asgi.application"
 # }
 
 # Postgres (supabase) database
-if DEBUG:
-    DATABASES = {
-        'default': {
-            'ENGINE': config('PROD_DATABASE_ENGINE'),
-            'HOST': config('PROD_DATABASE_HOST'),
-            'NAME': config('PROD_DATABASE_NAME'),
-            'USER': config('PROD_DATABASE_USER'),
-            'PORT': config('PROD_DATABASE_PORT', default='6543'),
-            'PASSWORD': config('PROD_DATABASE_PASSWORD'),
-        }
-    }
-else:
+if DEBUG:  # Development environment - use local database
     DATABASES = {
         'default': {
             'ENGINE': config('LOCAL_DATABASE_ENGINE'),
@@ -113,6 +103,17 @@ else:
             'USER': config('LOCAL_DATABASE_USER'),
             'PORT': config('LOCAL_DATABASE_PORT', default='5432'),
             'PASSWORD': config('LOCAL_DATABASE_PASSWORD'),
+        }
+    }
+else:  # Production environment - use Supabase database
+    DATABASES = {
+        'default': {
+            'ENGINE': config('PROD_DATABASE_ENGINE'),
+            'HOST': config('PROD_DATABASE_HOST'),
+            'NAME': config('PROD_DATABASE_NAME'),
+            'USER': config('PROD_DATABASE_USER'),
+            'PORT': config('PROD_DATABASE_PORT', default='6543'),
+            'PASSWORD': config('PROD_DATABASE_PASSWORD'),
         }
     }
 
@@ -135,6 +136,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Image upload settings
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
