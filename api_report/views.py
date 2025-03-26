@@ -62,37 +62,66 @@ def create_report(request: Request):
         #     return JsonResponse({'error': 'authentication required'}, status=401)
         user = None
 
-        data = json.loads(request.body)
-        evidance = data.get('evidance')
-        description = data.get('description')
-        category = data.get('category')
-        location = data.get('location')
-        if not evidance or not description or not category or not location:
-            return JsonResponse({'error': 'evidance, description, category, and location are required'}, status=400)
+        evidance = request.FILES.get('evidance')
+        description = request.POST.get('description')
+        category = request.POST.get('category')
+        location = request.POST.get('location')
+        if not evidance:
+            return JsonResponse({'error': 'Evidance is required'}, status=400)
+        if not description:
+            return JsonResponse({'error': 'Description is required'}, status=400)
+        if not category:
+            return JsonResponse({'error': 'Category is required'}, status=400)
+        if not location:
+            return JsonResponse({'error': 'Location is required'}, status=400)
+        
         
         try:
-            report = Report.objects.create_report(user, evidance, description, category, location)
-            return JsonResponse({
-                'message': 'Report successfully created!',
-                'report': {
-                    'id': report.id,
-                    'evidance': report.evidance,
-                    'description': report.description,
-                    'category': report.category,
-                    'location': report.location,
-                    'status': report.status,
-                    'created_at': report.created_at,
-                    'updated_at': report.updated_at,
-                }
-            }, status=201)
+            report = Report.objects.create_report(user, category, evidance, description, location)
+            response_data = {
+                'id': str(report.id_report),
+                'description': report.description,
+                'category': report.category,
+                'location': report.location,
+                'created_at': report.created_at.isoformat(),
+                'status': {
+                    'keterangan': report.status.keterangan,
+                    'detail_status': report.status.detail_status,
+                    'waktu_update': report.status.waktu_update.isoformat()
+                } if hasattr(report, 'status') else None
+            }
+
+            # Add image data if exists
+            if report.evidance:
+                # Option 2: Return base64 encoded image
+                try:
+                    with open(report.evidance.path, 'rb') as img_file:
+                        encoded_image = base64.b64encode(img_file.read()).decode('utf-8')
+                        file_ext = os.path.splitext(report.evidance.name)[1].lstrip('.')
+                        response_data['evidance_base64'] = f"data:image/{file_ext};base64,{encoded_image}"
+                except Exception as e:
+                    response_data['evidance_error'] = str(e)
+
+            return JsonResponse(response_data, status=200)
+            # return JsonResponse({
+            #     'message': 'Report successfully created!',
+            #     'report': {
+            #         'id': report.id_report,
+            #         'description': report.description,
+            #         'category': report.category,
+            #         'location': report.location,
+            #         'status': report.status.keterangan,
+            #         'created_at': report.created_at,
+            #     }
+            # }, status=201)
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
+            return JsonResponse({'error': e}, status=400)
     
     else:
         return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-api_view(['GET'])
-def get_report(request, report_id):
+@api_view(['GET'])
+def get_report_by_id(request, report_id):
     if request.method == 'GET':
         try:
             report = Report.objects.get(id_report=report_id)
@@ -101,6 +130,38 @@ def get_report(request, report_id):
             return JsonResponse({'error': 'Report not found'}, status=404)
     else:
         return JsonResponse({'error': 'Invalid request method'}, status=405)
+    
+@api_view(['GET'])
+def get_report_by_user(request):
+    if request.method == 'GET':
+        try:
+            user = request.user
+            reports = Report.objects.filter(user=user)
+            return JsonResponse({
+                'reports': [report.to_dict() for report in reports]
+            }, status=200)
+        except Report.DoesNotExist:
+            return JsonResponse({'error': 'No report found'}, status=404)
+    else:
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@api_view(['GET'])
+def get_report(request):
+    if request.method == 'GET':
+        try:
+            # Get reports excluding rejected and completed status
+            reports = Report.objects.exclude(
+                status__keterangan__in=['rejected', 'completed']
+            ).select_related('status')
+
+            return JsonResponse({
+                'reports': [report.to_dict() for report in reports]
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 @api_view(['POST'])
 def update_report_status(request, report_id):

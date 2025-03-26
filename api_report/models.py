@@ -9,11 +9,12 @@ from django.core.validators import RegexValidator
 
 # Create your models here.
 class ReportManager(models.Manager):
-    def create_report(self, id_user, evidance, description, location):
+    def create_report(self, id_user, category, evidance, description, location):
         clean_evidance = self.validate_evidance(evidance)
         clean_description = self.validate_description(description)
         clean_location = self.validate_location(location)
-        report = self.create(id_user=id_user, evidance=clean_evidance, description=clean_description, location=clean_location)
+        clean_category = self.validate_category(category)
+        report = self.create(evidance=clean_evidance, description=clean_description, location=clean_location, category=clean_category)
         return report
 
     def evidance_upload_path(self, instance, filename):
@@ -22,10 +23,10 @@ class ReportManager(models.Manager):
     def validate_evidance(self, file):
         if not file:
             raise ValidationError('Evidance is required')
-        VALID_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov']
+        VALID_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov']
         file = os.path.splitext(file.name)[1].lower()
         if file not in VALID_EXTENSIONS:
-            raise ValidationError('Invalid file type')
+            raise ValidationError('Invalid file type {}'.format(file))
         
     def validate_description(self, description):
         if not description:
@@ -88,9 +89,9 @@ class ReportManager(models.Manager):
     def validate_category(self, category):
         if not category:
             raise ValidationError('Category is required')
-        if category not in ['crime', 'corruption', 'infrastructure', 'health', 'education', 'environment', 'other']:
-            raise ValidationError('Invalid category')
-        
+        # valid_categories = dict(Report.category_choices).keys()
+        # if category not in valid_categories:
+        #     raise ValidationError(f'Invalid category. Must be one of: {", ".join(valid_categories)}')
         return category
 
 
@@ -115,6 +116,23 @@ class Report(models.Model):
 
     objects = ReportManager()
 
+    def to_dict(self):
+        """Convert report instance to dictionary for JSON serialization"""
+        data = {
+            'id': str(self.id_report),
+            'description': self.description,
+            'category': self.category,
+            'location': self.location,
+            'created_at': self.created_at.isoformat(),
+            # 'evidance': self.evidance,
+            'status': {
+                'keterangan': self.status.keterangan,
+                'detail_status': self.status.detail_status,
+                'waktu_update': self.status.waktu_update.isoformat()
+            } if hasattr(self, 'status') else None
+        }
+        return data
+    
     def get_status(self):
         return self.status
 

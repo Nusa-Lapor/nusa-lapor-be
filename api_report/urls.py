@@ -4,6 +4,8 @@ from .views import (
     save_details,
     finalize_report,
     create_report,
+    get_report_by_id,
+    get_report_by_user,
     get_report,
     update_report_status,
     assign_report
@@ -21,7 +23,9 @@ urlpatterns = [
     path('create-report/', create_report, name='create_report'),
     
     # Report management
-    path('report/<uuid:report_id>/', get_report, name='get_report'),
-    path('report/<uuid:report_id>/update-status/', update_report_status, name='update_report_status'),
-    path('report/<uuid:report_id>/assign/', assign_report, name='assign_report'),
+    path('<uuid:report_id>/', get_report_by_id, name='get_report'),
+    path('<uuid:report_id>/update-status/', update_report_status, name='update_report_status'),
+    path('<uuid:report_id>/assign/', assign_report, name='assign_report'),
+    path('user/', get_report_by_user, name='get_report_by_user'),
+    path('', get_report, name='get_report'),
 ]
