@@ -1,8 +1,14 @@
+import os
+import json
+from django.forms import ValidationError
 from django.shortcuts import render, get_object_or_404
-from rest_framework import viewsets, permissions, status, filters
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django.db.models import F
+from django.http import JsonResponse
+from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
+from rest_framework.request import Request
+from django.views.decorators.csrf import csrf_exempt
+from django.db.models import F, Q
+from django.utils.text import slugify
 from .models import Artikel, Komentar, Tag
 from .serializers import (
     ArtikelListSerializer,
@@ -13,153 +19,332 @@ from .serializers import (
     TagSerializer
 )
 
-# Create your views here.
+# ===== Artikel APIs =====
 
 
-class ArtikelViewSet(viewsets.ModelViewSet):
+@api_view(['GET'])
+def get_articles(request: Request):
     """
-    API endpoint untuk artikel.
+    Mendapatkan daftar artikel yang dipublikasikan
     """
-    queryset = Artikel.objects.filter(
-        status='published').order_by('-tanggal_publikasi')
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['judul', 'konten', 'penulis', 'kategori']
-    ordering_fields = ['tanggal_publikasi', 'tampilan', 'penulis']
-    lookup_field = 'slug'
+    try:
+        # Filter artikel
+        kategori = request.query_params.get('kategori', None)
+        search = request.query_params.get('search', None)
+        featured = request.query_params.get('featured', None)
 
-    def get_serializer_class(self):
-        if self.action == 'list':
-            return ArtikelListSerializer
-        elif self.action in ['create', 'update', 'partial_update']:
-            return ArtikelCreateUpdateSerializer
-        return ArtikelDetailSerializer
+        articles = Artikel.objects.filter(
+            status='published').order_by('-tanggal_publikasi')
 
-    def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            self.permission_classes = [permissions.IsAdminUser]
-        else:
-            self.permission_classes = [permissions.AllowAny]
-        return super().get_permissions()
+        if kategori:
+            articles = articles.filter(kategori=kategori)
 
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        # Increment view count
-        instance.tampilan = F('tampilan') + 1
-        instance.save(update_fields=['tampilan'])
-        instance.refresh_from_db()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+        if search:
+            articles = articles.filter(
+                Q(judul__icontains=search) |
+                Q(konten__icontains=search) |
+                Q(penulis__icontains=search)
+            )
 
-    @action(detail=False)
-    def featured(self, request):
-        """
-        Menampilkan artikel yang difeature
-        """
-        featured = Artikel.objects.filter(
-            featured=True, status='published')[:5]
-        serializer = ArtikelListSerializer(featured, many=True)
-        return Response(serializer.data)
+        if featured and featured.lower() == 'true':
+            articles = articles.filter(featured=True)
 
-    @action(detail=False)
-    def categories(self, request):
-        """
-        Menampilkan daftar kategori
-        """
+        # Batasi hasil untuk pagination
+        limit = int(request.query_params.get('limit', 10))
+        offset = int(request.query_params.get('offset', 0))
+        articles = articles[offset:offset+limit]
+
+        serializer = ArtikelListSerializer(articles, many=True)
+        return JsonResponse(serializer.data, safe=False, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['GET'])
+def get_article(request: Request, slug):
+    """
+    Mendapatkan detail artikel berdasarkan slug
+    """
+    try:
+        artikel = get_object_or_404(Artikel, slug=slug, status='published')
+
+        # Tambahkan jumlah tampilan
+        artikel.tampilan = F('tampilan') + 1
+        artikel.save(update_fields=['tampilan'])
+        artikel.refresh_from_db()
+
+        serializer = ArtikelDetailSerializer(artikel)
+        return JsonResponse(serializer.data, safe=False, status=200)
+
+    except Artikel.DoesNotExist:
+        return JsonResponse({'error': 'Artikel tidak ditemukan'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def create_article(request: Request):
+    """
+    Membuat artikel baru (hanya admin)
+    """
+    try:
+        serializer = ArtikelCreateUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            artikel = serializer.save()
+            return JsonResponse({
+                'message': 'Artikel berhasil dibuat',
+                'artikel': ArtikelDetailSerializer(artikel).data
+            }, status=201)
+        return JsonResponse({'error': serializer.errors}, status=400)
+
+    except ValidationError as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([IsAdminUser])
+def update_article(request: Request, slug):
+    """
+    Memperbarui artikel (hanya admin)
+    """
+    try:
+        artikel = get_object_or_404(Artikel, slug=slug)
+
+        # Partial update jika PATCH
+        partial = request.method == 'PATCH'
+
+        serializer = ArtikelCreateUpdateSerializer(
+            artikel,
+            data=request.data,
+            partial=partial
+        )
+
+        if serializer.is_valid():
+            artikel = serializer.save()
+            return JsonResponse({
+                'message': 'Artikel berhasil diperbarui',
+                'artikel': ArtikelDetailSerializer(artikel).data
+            }, status=200)
+
+        return JsonResponse({'error': serializer.errors}, status=400)
+
+    except Artikel.DoesNotExist:
+        return JsonResponse({'error': 'Artikel tidak ditemukan'}, status=404)
+    except ValidationError as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAdminUser])
+def delete_article(request: Request, slug):
+    """
+    Menghapus artikel (hanya admin)
+    """
+    try:
+        artikel = get_object_or_404(Artikel, slug=slug)
+        artikel.delete()
+        return JsonResponse({'message': 'Artikel berhasil dihapus'}, status=200)
+
+    except Artikel.DoesNotExist:
+        return JsonResponse({'error': 'Artikel tidak ditemukan'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['GET'])
+def get_article_categories(request: Request):
+    """
+    Mendapatkan daftar kategori artikel
+    """
+    try:
         categories = [{'id': id, 'name': name}
                       for id, name in Artikel.kategori_choices]
-        return Response(categories)
+        return JsonResponse(categories, safe=False, status=200)
 
-    @action(detail=False, url_path='category/(?P<kategori>[^/.]+)')
-    def by_category(self, request, kategori=None):
-        """
-        Menampilkan artikel berdasarkan kategori
-        """
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['GET'])
+def get_articles_by_category(request: Request, kategori):
+    """
+    Mendapatkan artikel berdasarkan kategori
+    """
+    try:
         valid_categories = dict(Artikel.kategori_choices).keys()
         if kategori not in valid_categories:
-            return Response(
+            return JsonResponse(
                 {"error": f"Kategori tidak valid. Pilih dari: {', '.join(valid_categories)}"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=400
             )
 
         articles = Artikel.objects.filter(
             kategori=kategori, status='published')
         serializer = ArtikelListSerializer(articles, many=True)
-        return Response(serializer.data)
+        return JsonResponse(serializer.data, safe=False, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
 
-class KomentarViewSet(viewsets.ModelViewSet):
+@api_view(['GET'])
+def get_featured_articles(request: Request):
     """
-    API endpoint untuk komentar.
+    Mendapatkan artikel yang difeature
     """
-    queryset = Komentar.objects.all()
+    try:
+        featured = Artikel.objects.filter(
+            featured=True, status='published').order_by('-tanggal_publikasi')[:5]
+        serializer = ArtikelListSerializer(featured, many=True)
+        return JsonResponse(serializer.data, safe=False, status=200)
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return KomentarCreateSerializer
-        return KomentarSerializer
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
-    def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy', 'list', 'approve']:
-            self.permission_classes = [permissions.IsAdminUser]
-        else:
-            self.permission_classes = [permissions.AllowAny]
-        return super().get_permissions()
+# ===== Komentar APIs =====
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
-    def approve(self, request, pk=None):
-        """
-        Menyetujui komentar
-        """
-        komentar = self.get_object()
+
+@api_view(['POST'])
+def create_comment(request: Request):
+    """
+    Membuat komentar baru
+    """
+    try:
+        serializer = KomentarCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            komentar = serializer.save()
+            return JsonResponse({
+                'message': 'Komentar berhasil dibuat dan menunggu persetujuan',
+                'komentar': KomentarSerializer(komentar).data
+            }, status=201)
+        return JsonResponse({'error': serializer.errors}, status=400)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['GET'])
+def get_comments_by_article(request: Request, article_id):
+    """
+    Mendapatkan komentar berdasarkan artikel
+    """
+    try:
+        artikel = get_object_or_404(Artikel, id_artikel=article_id)
+        komentar = Komentar.objects.filter(artikel=artikel, disetujui=True)
+        serializer = KomentarSerializer(komentar, many=True)
+        return JsonResponse(serializer.data, safe=False, status=200)
+
+    except Artikel.DoesNotExist:
+        return JsonResponse({'error': 'Artikel tidak ditemukan'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def approve_comment(request: Request, comment_id):
+    """
+    Menyetujui komentar (hanya admin)
+    """
+    try:
+        komentar = get_object_or_404(Komentar, id_komentar=comment_id)
         komentar.approve()
-        return Response({'status': 'Komentar disetujui'})
+        return JsonResponse({'message': 'Komentar berhasil disetujui'}, status=200)
 
-    @action(detail=False)
-    def by_article(self, request):
-        """
-        Menampilkan komentar berdasarkan artikel
-        """
-        article_id = request.query_params.get('article_id', None)
-        if not article_id:
-            return Response(
-                {"error": "Parameter article_id diperlukan"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            article = Artikel.objects.get(id_artikel=article_id)
-        except Artikel.DoesNotExist:
-            return Response(
-                {"error": "Artikel tidak ditemukan"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        comments = Komentar.objects.filter(artikel=article, disetujui=True)
-        serializer = KomentarSerializer(comments, many=True)
-        return Response(serializer.data)
+    except Komentar.DoesNotExist:
+        return JsonResponse({'error': 'Komentar tidak ditemukan'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
 
-class TagViewSet(viewsets.ModelViewSet):
+@api_view(['DELETE'])
+@permission_classes([IsAdminUser])
+def delete_comment(request: Request, comment_id):
     """
-    API endpoint untuk tag.
+    Menghapus komentar (hanya admin)
     """
-    queryset = Tag.objects.all()
-    serializer_class = TagSerializer
-    lookup_field = 'slug'
+    try:
+        komentar = get_object_or_404(Komentar, id_komentar=comment_id)
+        komentar.delete()
+        return JsonResponse({'message': 'Komentar berhasil dihapus'}, status=200)
 
-    def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            self.permission_classes = [permissions.IsAdminUser]
-        else:
-            self.permission_classes = [permissions.AllowAny]
-        return super().get_permissions()
+    except Komentar.DoesNotExist:
+        return JsonResponse({'error': 'Komentar tidak ditemukan'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
-    @action(detail=True)
-    def articles(self, request, slug=None):
-        """
-        Menampilkan artikel berdasarkan tag
-        """
-        tag = self.get_object()
+# ===== Tag APIs =====
+
+
+@api_view(['GET'])
+def get_tags(request: Request):
+    """
+    Mendapatkan daftar tag
+    """
+    try:
+        tags = Tag.objects.all()
+        serializer = TagSerializer(tags, many=True)
+        return JsonResponse(serializer.data, safe=False, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['GET'])
+def get_articles_by_tag(request: Request, slug):
+    """
+    Mendapatkan artikel berdasarkan tag
+    """
+    try:
+        tag = get_object_or_404(Tag, slug=slug)
         articles = tag.artikel.filter(status='published')
         serializer = ArtikelListSerializer(articles, many=True)
-        return Response(serializer.data)
+        return JsonResponse(serializer.data, safe=False, status=200)
+
+    except Tag.DoesNotExist:
+        return JsonResponse({'error': 'Tag tidak ditemukan'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def create_tag(request: Request):
+    """
+    Membuat tag baru (hanya admin)
+    """
+    try:
+        serializer = TagSerializer(data=request.data)
+        if serializer.is_valid():
+            tag = serializer.save()
+            return JsonResponse({
+                'message': 'Tag berhasil dibuat',
+                'tag': TagSerializer(tag).data
+            }, status=201)
+        return JsonResponse({'error': serializer.errors}, status=400)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAdminUser])
+def delete_tag(request: Request, slug):
+    """
+    Menghapus tag (hanya admin)
+    """
+    try:
+        tag = get_object_or_404(Tag, slug=slug)
+        tag.delete()
+        return JsonResponse({'message': 'Tag berhasil dihapus'}, status=200)
+
+    except Tag.DoesNotExist:
+        return JsonResponse({'error': 'Tag tidak ditemukan'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
