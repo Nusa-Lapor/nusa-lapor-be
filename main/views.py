@@ -1,8 +1,9 @@
 from django.shortcuts import render
-from django.http import HttpResponse
-# from django_nextjs.render import render_nextjs_page
+from django.http import JsonResponse
+from api_auth.models import User
+from asgiref.sync import sync_to_async
 
-# Create your views here.
 async def index(request):
-    # return await render_nextjs_page(request)
-    return HttpResponse("<h1>Selamat Datang di NusaLapor</h1><p>Server Django berhasil berjalan</p>")
+    users = await sync_to_async(list)(User.objects.all())
+    users_data = [{'id': user.id, 'email': user.email, 'username': user.username, 'name': user.name, 'nomor_telepon': user.nomor_telepon,} for user in users]
+    return JsonResponse(users_data, safe=False)
