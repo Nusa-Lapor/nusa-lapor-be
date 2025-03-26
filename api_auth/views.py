@@ -1,4 +1,5 @@
 import hashlib, base64
+from tokenize import TokenError
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -219,3 +220,35 @@ def logout(request: Request):
     
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def request_access_token(request: Request):
+    """
+    Request a new access token using a refresh token.
+    """
+    try:
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return JsonResponse({
+                'error': 'Refresh token is required'
+            }, status=400)
+        
+        # Validate and use the refresh token
+        try:
+            token = RefreshToken(refresh_token)
+            access_token = str(token.access_token)
+            
+            return JsonResponse({
+                'access': access_token
+            }, status=200)
+            
+        except TokenError:
+            return JsonResponse({
+                'error': 'Invalid or expired refresh token'
+            }, status=401)
+            
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=400)
