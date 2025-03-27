@@ -55,7 +55,6 @@ def finalize_report(request: Request):
 
     return JsonResponse({'message': 'report created'}, status=200)
 
-
 """
 Method for handling report creation process in a single step
 """
