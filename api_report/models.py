@@ -176,7 +176,7 @@ class Report(models.Model):
         self.status.keterangan = new_status
         self.status.detail_status = detail
         self.status.save()
-
+        
     def is_new(self):
         return self.get_status() == 'new'
 

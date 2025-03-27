@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from api_auth.models import User
 from asgiref.sync import sync_to_async
 from rest_framework.decorators import api_view
