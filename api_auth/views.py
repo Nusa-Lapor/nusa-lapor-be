@@ -3,7 +3,8 @@ from tokenize import TokenError
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 from django.contrib.auth import get_user_model
 from rest_framework.request import Request
 from django.views.decorators.csrf import csrf_exempt
@@ -11,7 +12,7 @@ import json
 from .serializers import UserSerializer
 from .permissions import IsPetugas, IsAdmin
 from .models import User, Petugas
-from .throttling import LoginRateThrottle, SuccessfulLoginResetThrottle
+from .throttling import LoginRateThrottle, SuccessfulLoginResetThrottle, TokenRefreshRateThrottle
 from rest_framework.exceptions import Throttled
 
 @csrf_exempt
@@ -275,12 +276,16 @@ def logout(request: Request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([TokenRefreshRateThrottle])
 def request_access_token(request: Request):
     """
     Request a new access token using a refresh token.
+    Includes rate limiting and blacklists old access tokens if provided.
     """
     try:
         refresh_token = request.data.get('refresh')
+        old_access_token = request.data.get('access', None)
+        
         if not refresh_token:
             return JsonResponse({
                 'error': 'Refresh token is required'
@@ -288,7 +293,35 @@ def request_access_token(request: Request):
         
         # Validate and use the refresh token
         try:
+            # If old access token provided, blacklist it
+            if old_access_token:
+                try:
+                    # Parse the token
+                    token_obj = AccessToken(old_access_token)
+                    jti = token_obj['jti']
+                    
+                    # Find the corresponding OutstandingToken and blacklist it
+                    outstanding_token = OutstandingToken.objects.filter(jti=jti).first()
+                    if outstanding_token:
+                        BlacklistedToken.objects.get_or_create(token=outstanding_token)
+                except Exception as blacklist_error:
+                    # Log error but continue with token refresh
+                    print(f"Error blacklisting token: {str(blacklist_error)}")
+            
+            # Get new token
             token = RefreshToken(refresh_token)
+            
+            # Extract user info for additional validation if needed
+            user_id = token.payload.get('user_id')
+            
+            # Optional: Check if user is still valid/active
+            user = User.objects.filter(id=user_id).first()
+            if user and not user.is_active:
+                return JsonResponse({
+                    'error': 'User account is disabled'
+                }, status=401)
+            
+            # Generate new access token
             access_token = str(token.access_token)
             
             return JsonResponse({
