@@ -64,11 +64,11 @@ Method for handling report creation process in a single step
 def create_report(request: Request):
     if request.method == 'POST':
         user = request.user
-        print(user)
-        evidance = request.FILES.get('evidance')
-        description = request.POST.get('description')
-        category = request.POST.get('category')
-        location = request.POST.get('location')
+        data = json.loads(request.body)
+        evidance = data.get('evidance')
+        description = data.get('description')
+        category = data.get('category')
+        location = data.get('location')
         if not evidance:
             return JsonResponse({'error': 'Evidance is required'}, status=400)
         if not description:
