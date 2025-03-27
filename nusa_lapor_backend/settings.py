@@ -131,9 +131,14 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_THROTTLE_CLASSES': [
         'api_auth.throttling.LoginRateThrottle',
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
         'login': '3/m',  # 3 attempts per minute
+        'token_refresh': '5/m',  # 5 refreshes per minute
+        'anon': '100/day',  # 100 requests per day
+        'user': '1000/day',  # 1000 requests per day
     },
     'EXCEPTION_HANDLER': 'api_auth.exceptions.custom_exception_handler',
 }
