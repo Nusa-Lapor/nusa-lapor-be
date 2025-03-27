@@ -23,6 +23,8 @@ class AuthAPITestCase(TestCase):
         self.protected_url = reverse('api_auth:protected')
         self.protected_petugas_url = reverse('api_auth:protected_petugas')
         self.protected_admin_url = reverse('api_auth:protected_admin')
+        self.assign_petugas_url = reverse('api_auth:assign_petugas')
+        self.refresh_token_url = reverse('api_auth:token_refresh')
         self.logout_url = reverse('api_auth:logout')
         
         # Test user data
@@ -393,7 +395,79 @@ class AuthAPITestCase(TestCase):
         self.assertEqual(response_data['admin']['email'], self.valid_admin['email'])
         self.assertTrue(response_data['admin']['is_superuser'])
 
-    
+    def test_assign_petugas(self):
+        """Test assigning a user to be a petugas, by an admin."""
+        # First login as admin to get the token
+        login_response = self.client.post(
+            self.login_url,
+            data=json.dumps({
+                'email': self.valid_admin['email'],
+                'password': self.valid_admin['password']
+            }),
+            content_type='application/json'
+        )
+        access_token = login_response.json()['token']['access']
+        
+        response = self.client.post(
+            self.assign_petugas_url,
+            data=json.dumps({'user_id': str(self.user.id)}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {access_token}'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response_data = response.json()
+        self.assertEqual(response_data['message'], 'User assigned as Petugas')
+        self.assertEqual(response_data['petugas']['jabatan'], 'Petugas Lapangan')
+
+    def test_assign_petugas_failed(self):
+        """Test assigning a user to be a petugas, by an admin, but failed because the user is already a petugas."""
+        # First login as admin to get the token
+        login_response = self.client.post(
+            self.login_url,
+            data=json.dumps({
+                'email': self.valid_admin['email'],
+                'password': self.valid_admin['password']
+            }),
+            content_type='application/json'
+        )
+        access_token = login_response.json()['token']['access']
+
+        # Assign the user as petugas
+        response = self.client.post(
+            self.assign_petugas_url,
+            data=json.dumps({'user_id': str(self.petugas.id)}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {access_token}'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json(), {'error': 'User is already a Petugas'})
+
+    def test_refresh_token(self):
+        """Test refreshing the access token."""
+        # First login to get the refresh token
+        login_response = self.client.post(
+            self.login_url,
+            data=json.dumps({
+                'email': self.valid_user['email'],
+                'password': self.valid_user['password']
+            }),
+            content_type='application/json',
+        )
+        refresh_token = login_response.json()['token']['refresh']
+
+        # Now refresh the token
+        refresh_response = self.client.post(
+            self.refresh_token_url,
+            data=json.dumps({'refresh': refresh_token}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(refresh_response.status_code, status.HTTP_200_OK)
+        response_data = refresh_response.json()
+        self.assertTrue('access' in response_data)      
+
     
     def test_encrypted_phone_field(self):
         """Test the EncryptedPhoneField validation and transformation."""

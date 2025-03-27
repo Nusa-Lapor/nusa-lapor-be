@@ -4,7 +4,8 @@ from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.forms import ValidationError
-from django.core.validators import RegexValidator
+from django.core.validators import RegexValidator, URLValidator
+from api_auth.models import User
 
 
 # Create your models here.
@@ -14,19 +15,24 @@ class ReportManager(models.Manager):
         clean_description = self.validate_description(description)
         clean_location = self.validate_location(location)
         clean_category = self.validate_category(category)
-        report = self.create(evidance=clean_evidance, description=clean_description, location=clean_location, category=clean_category)
+        report = self.create(id_user=id_user, evidance=clean_evidance, description=clean_description, location=clean_location, category=clean_category)
         return report
-
-    def evidance_upload_path(self, instance, filename):
-        return os.path.join('evidance', instance.id_report, filename)
-    
-    def validate_evidance(self, file):
-        if not file:
-            raise ValidationError('Evidance is required')
-        VALID_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov']
-        file = os.path.splitext(file.name)[1].lower()
-        if file not in VALID_EXTENSIONS:
-            raise ValidationError('Invalid file type {}'.format(file))
+    def validate_evidance(self, evidance):
+        if not evidance:
+            return None
+        if len(evidance) < 10:
+            raise ValidationError('Evidance URL is too short')
+            
+        # Remove potential XSS scripts
+        clean_evidance = re.sub(r'<[^>]*>', '', evidance)
+            
+        url_validator = URLValidator()
+        try:
+            url_validator(clean_evidance)
+        except ValidationError as e:
+            raise ValidationError(f'Invalid URL: {e.message}')
+            
+        return clean_evidance
         
     def validate_description(self, description):
         if not description:
@@ -89,9 +95,8 @@ class ReportManager(models.Manager):
     def validate_category(self, category):
         if not category:
             raise ValidationError('Category is required')
-        # valid_categories = dict(Report.category_choices).keys()
-        # if category not in valid_categories:
-        #     raise ValidationError(f'Invalid category. Must be one of: {", ".join(valid_categories)}')
+        if category not in dict(Report.category_choices):
+            raise ValidationError(f'Invalid category. Must be one of: {", ".join(dict(Report.category_choices).values())}')
         return category
 
 
@@ -107,8 +112,8 @@ class Report(models.Model):
     ]
 
     id_report = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
-    # id_user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='reports')
-    evidance = models.FileField()
+    id_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reports', default=None)
+    evidance = models.URLField(max_length=255, blank=True, null=True)
     description = models.TextField()
     category = models.TextField(choices=category_choices, default='other')
     location = models.CharField(max_length=255)
@@ -124,7 +129,7 @@ class Report(models.Model):
             'category': self.category,
             'location': self.location,
             'created_at': self.created_at.isoformat(),
-            # 'evidance': self.evidance,
+            'evidance': self.evidance,
             'status': {
                 'keterangan': self.status.keterangan,
                 'detail_status': self.status.detail_status,
@@ -161,6 +166,17 @@ class Report(models.Model):
                 id_petugas=petugas
             )
 
+    def update_status_petugas(self, new_status, detail):
+        if not hasattr(self, 'status'):
+            raise ValidationError("Report has no status")
+        
+        if new_status not in dict('in_progress', 'completed'):
+            raise ValidationError(f"Invalid status: {new_status}")
+        
+        self.status.keterangan = new_status
+        self.status.detail_status = detail
+        self.status.save()
+        
     def is_new(self):
         return self.get_status() == 'new'
 
@@ -193,7 +209,7 @@ class Status(models.Model):
     keterangan = models.CharField(max_length=100, choices=status_choices, default='new')
     detail_status = models.TextField(blank=True, null=True)
     waktu_update = models.DateTimeField(auto_now=True)
-    # id_petugas = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='handled_statuses')
+    id_petugas = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='handled_statuses')
     id_laporan = models.OneToOneField('Report', on_delete=models.CASCADE, related_name='status')
 
     def __str__(self):
