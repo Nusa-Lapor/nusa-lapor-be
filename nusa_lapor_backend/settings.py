@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'api_auth',
     'api_article',
     'api_report',
+    'api_hotline',
 ]
 
 MIDDLEWARE = [
