@@ -194,47 +194,47 @@ def update_report_status(request, report_id):
     except ValidationError as e:
         return JsonResponse({'error': str(e)}, status=400)
     
-# @api_view(['POST'])
-# @permission_classes([IsAdmin, IsAuthenticated])
-# def assign_report(request, report_id):
-#     try:
-#         report = Report.objects.get(id_report=report_id)
+@api_view(['POST'])
+@permission_classes([IsAdmin, IsAuthenticated])
+def assign_report(request, report_id):
+    try:
+        report = Report.objects.get(id_report=report_id)
         
-#         report.assign_officer(request.user)
+        report.assign_officer(request.user)
         
-#         return JsonResponse({
-#             'message': 'Report assigned successfully',
-#             'status': report.get_status()
-#         })
-#     except Report.DoesNotExist:
-#         return JsonResponse({'error': 'Report not found'}, status=404)
-#     except ValidationError as e:
-#         return JsonResponse({'error': str(e)}, status=400)
+        return JsonResponse({
+            'message': 'Report assigned successfully',
+            'status': report.get_status()
+        })
+    except Report.DoesNotExist:
+        return JsonResponse({'error': 'Report not found'}, status=404)
+    except ValidationError as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
-# @api_view(['POST'])
-# @permission_classes([IsPetugas])
-# def update_report_status_petugas(request: Request, report_id):
-#     if request.method == 'POST':
-#         try:
-#             report = Report.objects.get(id_report=report_id)
-#             data = json.loads(request.body)
+@api_view(['POST'])
+@permission_classes([IsPetugas])
+def update_report_status_petugas(request: Request, report_id):
+    if request.method == 'POST':
+        try:
+            report = Report.objects.get(id_report=report_id)
+            data = json.loads(request.body)
             
-#             new_status = data.get('status')
-#             detail = data.get('detail')
+            new_status = data.get('status')
+            detail = data.get('detail')
             
-#             report.update_status_petugas(new_status, detail, request.user)
+            report.update_status_petugas(new_status, detail, request.user)
             
-#             return JsonResponse({
-#                 'message': 'Status updated successfully',
-#             }, status=201)
+            return JsonResponse({
+                'message': 'Status updated successfully',
+            }, status=201)
         
-#         except Report.DoesNotExist:
-#             return JsonResponse({'error': 'Report not found'}, status=404)
-#         except ValidationError as e:
-#             return JsonResponse({'error': str(e)}, status=400)
+        except Report.DoesNotExist:
+            return JsonResponse({'error': 'Report not found'}, status=404)
+        except ValidationError as e:
+            return JsonResponse({'error': str(e)}, status=400)
             
-#     else:
-#         return JsonResponse({'error': 'Invalid request method'}, status=405)
+    else:
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
     
 
     
