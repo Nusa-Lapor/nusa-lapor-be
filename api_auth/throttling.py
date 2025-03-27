@@ -1,8 +1,15 @@
-from rest_framework.throttling import SimpleRateThrottle
+from rest_framework.throttling import SimpleRateThrottle, AnonRateThrottle
 from django.core.cache import cache
 from rest_framework.exceptions import Throttled
 import sys
 import time
+
+class TokenRefreshRateThrottle(AnonRateThrottle):
+    """
+    Custom throttle for token refresh requests.
+    """
+    scope = 'token_refresh'
+    rate = '5/m'  # 5 requests per minute
 
 class LoginRateThrottle(SimpleRateThrottle):
     """
