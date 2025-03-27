@@ -26,8 +26,6 @@ urlpatterns = [
     # Report management
     path('<uuid:report_id>/', get_report_by_id, name='get_report'),
     path('<uuid:report_id>/update-status/', update_report_status, name='update_report_status'),
-    path('<uuid:report_id>/update-status-petugas/', update_report_status_petugas, name='update_report_status_petugas'),
-    path('<uuid:report_id>/assign/', assign_report, name='assign_report'),
     path('user/', get_report_by_user, name='get_report_by_user'),
-    path('', get_report, name='get_report'),
+    path('get-report/', get_report, name='get_report'),
 ]

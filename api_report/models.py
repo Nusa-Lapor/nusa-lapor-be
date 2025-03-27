@@ -4,7 +4,7 @@ from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.forms import ValidationError
-from django.core.validators import RegexValidator
+from django.core.validators import RegexValidator, URLValidator
 from api_auth.models import User
 
 
@@ -17,17 +17,22 @@ class ReportManager(models.Manager):
         clean_category = self.validate_category(category)
         report = self.create(id_user=id_user, evidance=clean_evidance, description=clean_description, location=clean_location, category=clean_category)
         return report
-
-    def evidance_upload_path(self, instance, filename):
-        return os.path.join('evidance', instance.id_report, filename)
-    
-    def validate_evidance(self, file):
-        if not file:
-            raise ValidationError('Evidance is required')
-        VALID_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov']
-        file = os.path.splitext(file.name)[1].lower()
-        if file not in VALID_EXTENSIONS:
-            raise ValidationError('Invalid file type {}'.format(file))
+    def validate_evidance(self, evidance):
+        if not evidance:
+            return None
+        if len(evidance) < 10:
+            raise ValidationError('Evidance URL is too short')
+            
+        # Remove potential XSS scripts
+        clean_evidance = re.sub(r'<[^>]*>', '', evidance)
+            
+        url_validator = URLValidator()
+        try:
+            url_validator(clean_evidance)
+        except ValidationError as e:
+            raise ValidationError(f'Invalid URL: {e.message}')
+            
+        return clean_evidance
         
     def validate_description(self, description):
         if not description:
@@ -108,7 +113,7 @@ class Report(models.Model):
 
     id_report = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
     id_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reports', default=None)
-    evidance = models.FileField()
+    evidance = models.URLField(max_length=255, blank=True, null=True)
     description = models.TextField()
     category = models.TextField(choices=category_choices, default='other')
     location = models.CharField(max_length=255)
@@ -124,7 +129,7 @@ class Report(models.Model):
             'category': self.category,
             'location': self.location,
             'created_at': self.created_at.isoformat(),
-            # 'evidance': self.evidance,
+            'evidance': self.evidance,
             'status': {
                 'keterangan': self.status.keterangan,
                 'detail_status': self.status.detail_status,
