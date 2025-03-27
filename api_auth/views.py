@@ -10,7 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from .serializers import UserSerializer
 from .permissions import IsPetugas, IsAdmin
-from .models import User
+from .models import User, Petugas
 from .throttling import LoginRateThrottle, SuccessfulLoginResetThrottle
 from rest_framework.exceptions import Throttled
 
@@ -188,6 +188,58 @@ def protected_admin(request: Request):
             'total_petugas': petugas_count,
         }
     }, status=200)
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def assign_petugas(request: Request):
+    """
+    Assign a user as a Petugas.
+    This only works for admin users.
+    """
+    try:
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return JsonResponse({'error': 'User ID is required'}, status=400)
+        
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
+        
+        # Check if user is already a Petugas
+        if Petugas.objects.filter(id=user.id).exists():
+            return JsonResponse({'error': 'User is already a Petugas'}, status=400)
+        
+        # Get optional fields
+        jabatan = request.data.get('jabatan', 'Petugas Lapangan')  # Default to 'Petugas Lapangan' if not provided
+        
+        # Make user a staff member
+        user.is_staff = True
+        user.save()
+        
+        # Create the Petugas object using multi-table inheritance
+        petugas = Petugas(
+            user_ptr=user,
+            jabatan=jabatan
+        )
+        
+        # This is required because we're using multi-table inheritance - same as in PetugasManager
+        petugas.__dict__.update(user.__dict__)
+        petugas.save()
+        
+        return JsonResponse({
+            'message': 'User assigned as Petugas',
+            'petugas': {
+                'id': str(petugas.id),
+                'email': petugas.email,
+                'username': petugas.username,
+                'name': petugas.name,
+                'jabatan': petugas.jabatan
+            }
+        }, status=200)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
